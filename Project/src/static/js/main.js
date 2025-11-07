@@ -11,103 +11,22 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // State variables
     let isGradeLockOn = true;
-    let rowToDelete = null; // Variable to store the row pending deletion
+    let rowToDelete = null;
 
-    // --- NEW: Functions to control the custom confirmation dialog ---
+    // --- Custom Confirmation Dialog Functions ---
     function showConfirmation(message, row) {
-        rowToDelete = row; // Store the row context
+        rowToDelete = row;
         confirmMsg.textContent = message;
         confirmationAlert.style.display = 'block';
-        validationAlert.style.display = 'none'; // Hide validation alerts if any are showing
+        validationAlert.style.display = 'none';
     }
 
     function hideConfirmation() {
-        rowToDelete = null; // Clear the stored row
+        rowToDelete = null;
         confirmationAlert.style.display = 'none';
     }
 
-    // --- Event listeners for the new confirmation buttons ---
-    if (confirmNoBtn) {
-        confirmNoBtn.addEventListener('click', hideConfirmation);
-    }
-    
-    if (confirmYesBtn) {
-        confirmYesBtn.addEventListener('click', async function() {
-            if (rowToDelete) {
-                const logId = rowToDelete.dataset.id;
-
-                if (!logId) { // It's a new, unsaved row
-                    rowToDelete.remove();
-                    hideConfirmation();
-                    return;
-                }
-                
-                // It's an existing row, proceed with fetch
-                const filterDropdown = document.getElementById('subject-filter');
-                const currentFilter = filterDropdown ? filterDropdown.value : 'all';
-                
-                try {
-                    const response = await fetch(`/delete/${logId}?current_filter=${currentFilter}`, { method: 'POST' });
-                    const result = await response.json();
-                    
-                    showToast(result.message, response.ok ? 'success' : 'error');
-                    
-                    if (response.ok) {
-                        updateSummaryRow(result.summary, currentFilter);
-                        rowToDelete.remove();
-                    }
-                } catch (error) {
-                    console.error("Delete failed:", error);
-                    showToast("A network error occurred.", "error");
-                } finally {
-                    hideConfirmation(); // Hide the dialog regardless of outcome
-                }
-            }
-        });
-    }
-
-
-    function showToast(message, type = 'success') { /* ... (unchanged) ... */ }
-    function showValidationAlert(messages) { /* ... (unchanged) ... */ }
-    function validateRow(row) { /* ... (unchanged) ... */ }
-    function updateSummaryRow(summaryData, subjectName) { /* ... (unchanged) ... */ }
-    async function handleSave(row) { /* ... (unchanged) ... */ }
-    if (gradeLockBtn) { /* ... (unchanged) ... */ }
-    if (addRowBtn) { /* ... (unchanged) ... */ }
-
-    if (tableBody) {
-        tableBody.addEventListener('click', async function (event) {
-            if (!event.target.classList.contains('action-btn')) return;
-            const button = event.target;
-            const row = button.closest('tr');
-
-            if (button.classList.contains('edit-btn')) {
-                // (Edit logic is unchanged)
-            } else if (button.classList.contains('save-btn')) {
-                await handleSave(row);
-            } else if (button.classList.contains('delete-btn')) {
-                // --- UPDATED: Replace confirm() with our custom function ---
-                showConfirmation("Are you sure you want to delete this assignment?", row);
-            }
-        });
-
-        tableBody.addEventListener('input', function(event) {
-            if (event.target.matches('input')) {
-                showValidationAlert([]);
-                event.target.classList.remove('input-error');
-            }
-        });
-        
-        tableBody.addEventListener('keydown', async function(event) {
-            // (Keydown logic is unchanged)
-        });
-    }
-
-    // (Chart rendering logic is unchanged)
-
-    // NOTE: The full content of the file is below.
-    // Please copy and paste the entire thing.
-
+    // --- Helper Functions (Toast, Validation, Summary, Save) ---
     function showToast(message, type = 'success') {
         const toast = document.getElementById('toast');
         toast.textContent = message;
@@ -204,18 +123,43 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
     
+    // --- Event Listeners ---
+
+    if (confirmNoBtn) {
+        confirmNoBtn.addEventListener('click', hideConfirmation);
+    }
+    
+    if (confirmYesBtn) {
+        confirmYesBtn.addEventListener('click', async function() {
+            if (rowToDelete) {
+                const logId = rowToDelete.dataset.id;
+                if (!logId) { rowToDelete.remove(); hideConfirmation(); return; }
+                const filterDropdown = document.getElementById('subject-filter');
+                const currentFilter = filterDropdown ? filterDropdown.value : 'all';
+                try {
+                    const response = await fetch(`/delete/${logId}?current_filter=${currentFilter}`, { method: 'POST' });
+                    const result = await response.json();
+                    showToast(result.message, response.ok ? 'success' : 'error');
+                    if (response.ok) {
+                        updateSummaryRow(result.summary, currentFilter);
+                        rowToDelete.remove();
+                    }
+                } catch (error) {
+                    console.error("Delete failed:", error);
+                    showToast("A network error occurred.", "error");
+                } finally {
+                    hideConfirmation();
+                }
+            }
+        });
+    }
+
     if (gradeLockBtn) {
         gradeLockBtn.addEventListener('click', function() {
             isGradeLockOn = !isGradeLockOn;
-            if (isGradeLockOn) {
-                this.textContent = 'Grade Lock: ON';
-                this.classList.remove('lock-off');
-                this.classList.add('lock-on');
-            } else {
-                this.textContent = 'Grade Lock: OFF';
-                this.classList.remove('lock-on');
-                this.classList.add('lock-off');
-            }
+            this.textContent = isGradeLockOn ? 'Grade Lock: ON' : 'Grade Lock: OFF';
+            this.classList.toggle('lock-on', isGradeLockOn);
+            this.classList.toggle('lock-off', !isGradeLockOn);
         });
     }
 
@@ -235,12 +179,41 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     if (tableBody) {
+        // This is the main click handler that was broken. It is now complete.
+        tableBody.addEventListener('click', async function (event) {
+            if (!event.target.classList.contains('action-btn')) return;
+            const button = event.target;
+            const row = button.closest('tr');
+
+            // THIS IS THE RESTORED EDIT LOGIC
+            if (button.classList.contains('edit-btn')) {
+                button.textContent = 'Save';
+                button.classList.remove('edit-btn');
+                button.classList.add('save-btn');
+                const cells = row.querySelectorAll('td');
+                const gradeText = cells[3].textContent.trim();
+                const gradeValue = gradeText === '-' ? '' : parseInt(gradeText, 10);
+                const gradeAttributes = isGradeLockOn ? 'min="0" max="100"' : 'min="0"';
+                const weightAttributes = 'min="0" max="100"';
+                cells[0].innerHTML = `<input type="text" name="subject" value="${cells[0].textContent.trim()}" required list="subject-list">`;
+                cells[1].innerHTML = `<input type="number" name="study_time" value="${(parseFloat(cells[1].textContent) || 0).toFixed(1)}" step="0.1" min="0" required>`;
+                cells[2].innerHTML = `<input type="text" name="assignment_name" value="${cells[2].textContent.trim()}" required>`;
+                cells[3].innerHTML = `<input type="number" name="grade" value="${gradeValue}" ${gradeAttributes} placeholder="Optional">`;
+                cells[4].innerHTML = `<input type="number" name="weight" value="${parseInt(cells[4].textContent, 10) || 0}" ${weightAttributes} required>`;
+            } else if (button.classList.contains('save-btn')) {
+                await handleSave(row);
+            } else if (button.classList.contains('delete-btn')) {
+                showConfirmation("Are you sure you want to delete this assignment?", row);
+            }
+        });
+
         tableBody.addEventListener('input', function(event) {
             if (event.target.matches('input')) {
                 showValidationAlert([]);
                 event.target.classList.remove('input-error');
             }
         });
+        
         tableBody.addEventListener('keydown', async function(event) {
             if (event.key === 'Enter' && event.target.matches('input')) {
                 event.preventDefault();
@@ -249,6 +222,7 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
+    // Chart rendering logic
     const ctx = document.getElementById('hoursPieChart');
     if (ctx) {
         try {
