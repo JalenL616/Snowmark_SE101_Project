@@ -137,8 +137,6 @@ input {
     color: #721c24; 
     background-color: #f8d7da; 
 }
-
-/* --- ADDED BACK: Styles for the Toast Notification --- */
 #toast {
     position: fixed;
     bottom: 20px;
@@ -159,3 +157,48 @@ input {
 }
 #toast.success { background-color: #28a745; }
 #toast.error { background-color: #dc3545; }
+
+#validation-alert {
+    padding: 15px;
+    margin-bottom: 1em;
+    border: 1px solid #f5c6cb;
+    border-radius: 4px;
+    color: #721c24;
+    background-color: #f8d7da;
+    display: none;
+}
+#validation-alert ul {
+    margin: 0;
+    padding-left: 20px;
+}
+
+/* --- NEW: Styles for the custom confirmation dialog --- */
+#confirmation-alert {
+    padding: 15px;
+    margin-bottom: 1em;
+    border: 1px solid #ffc107; /* A warning yellow */
+    border-radius: 4px;
+    color: #856404;
+    background-color: #fff3cd;
+    display: none; /* Hidden by default */
+}
+#confirmation-alert p {
+    margin: 0 0 10px 0;
+}
+.confirmation-buttons button {
+    padding: 8px 15px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    cursor: pointer;
+    margin-right: 10px;
+}
+#confirm-yes {
+    background-color: #dc3545;
+    border-color: #dc3545;
+    color: white;
+}
+#confirm-no {
+    background-color: #6c757d;
+    border-color: #6c757d;
+    color: white;
+}
