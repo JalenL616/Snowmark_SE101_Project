@@ -1,32 +1,27 @@
 document.addEventListener('DOMContentLoaded', function() {
-    // Get all necessary elements from the DOM
-    const tableBody = document.getElementById('study-table-body');
+    // --- Element Selectors ---
+    const assignmentTableBody = document.getElementById('study-table-body');
+    const categoryTableBody = document.getElementById('category-table-body');
     const addRowBtn = document.getElementById('addRowBtn');
+    const addCategoryBtn = document.getElementById('addCategoryBtn');
     const gradeLockBtn = document.getElementById('grade-lock-btn');
     const validationAlert = document.getElementById('validation-alert');
-    const confirmationAlert = document.getElementById('confirmation-alert');
-    const confirmMsg = document.getElementById('confirmation-message');
-    const confirmYesBtn = document.getElementById('confirm-yes');
-    const confirmNoBtn = document.getElementById('confirm-no');
+    const confirmationModal = document.getElementById('confirmation-modal');
+    const modalMsg = document.getElementById('modal-message');
+    const confirmYesBtn = document.getElementById('modal-confirm-yes');
+    const confirmNoBtn = document.getElementById('modal-confirm-no');
+    const subjectFilterDropdown = document.getElementById('subject-filter');
 
-    // State variables
+    // --- State Variables ---
     let isGradeLockOn = true;
-    let rowToDelete = null;
+    let itemToDelete = {
+        row: null,
+        type: null
+    };
+    const weightCategoriesMap = JSON.parse(document.body.dataset.weightCategories || '{}');
+    let weightPreviewState = new Map();
 
-    // --- Custom Confirmation Dialog Functions ---
-    function showConfirmation(message, row) {
-        rowToDelete = row;
-        confirmMsg.textContent = message;
-        confirmationAlert.style.display = 'block';
-        validationAlert.style.display = 'none';
-    }
-
-    function hideConfirmation() {
-        rowToDelete = null;
-        confirmationAlert.style.display = 'none';
-    }
-
-    // --- Helper Functions (Toast, Validation, Summary, Save) ---
+    // --- Helper Functions ---
     function showToast(message, type = 'success') {
         let container = document.querySelector('.toast-container');
         if (!container) {
@@ -34,29 +29,40 @@ document.addEventListener('DOMContentLoaded', function() {
             container.className = 'toast-container';
             document.body.appendChild(container);
         }
-
         const toast = document.createElement('div');
         toast.className = `toast ${type}`;
         toast.textContent = message;
-
-        // Optional: click to remove immediately
-        toast.addEventListener('click', () => toast.remove());
-
         container.appendChild(toast);
-
-        // Trigger fade after a delay
         setTimeout(() => {
-            toast.style.opacity = 0;
-            toast.style.transform = 'translateY(-20px)';
-            setTimeout(() => toast.remove(), 500); // remove after fade
+            toast.classList.add('show');
+        }, 10);
+        setTimeout(() => {
+            toast.classList.remove('show');
+            toast.addEventListener('transitionend', () => toast.remove());
         }, 3000);
+    }
+
+    function showConfirmation(message, row, type) {
+        itemToDelete = {
+            row,
+            type
+        };
+        modalMsg.textContent = message;
+        confirmationModal.style.display = 'flex';
+    }
+
+    function hideConfirmation() {
+        itemToDelete = {
+            row: null,
+            type: null
+        };
+        confirmationModal.style.display = 'none';
     }
 
     function showValidationAlert(messages) {
         if (!validationAlert) return;
         if (messages && messages.length > 0) {
-            const listHtml = `<ul>${messages.map(msg => `<li>${msg}</li>`).join('')}</ul>`;
-            validationAlert.innerHTML = listHtml;
+            validationAlert.innerHTML = `<ul>${messages.map(msg => `<li>${msg}</li>`).join('')}</ul>`;
             validationAlert.style.display = 'block';
         } else {
             validationAlert.innerHTML = '';
@@ -66,8 +72,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
     function validateRow(row) {
         const errorMessages = [];
-        showValidationAlert([]);
-        const inputsToValidate = row.querySelectorAll('input[name]');
+        // Do not clear global alerts here, as multiple rows might have errors.
+        const inputsToValidate = row.querySelectorAll('input[required], select[required]');
         inputsToValidate.forEach(input => {
             input.classList.remove('input-error');
             if (!input.checkValidity()) {
@@ -93,73 +99,181 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         return true;
     }
-    
+
     function updateSummaryRow(summaryData, subjectName) {
-        let summaryRow = tableBody.querySelector('.summary-row');
+        let summaryRow = assignmentTableBody.querySelector('.summary-row');
         if (summaryData) {
-            const summaryHtml = `<td><strong>Summary for ${subjectName}</strong></td><td>${summaryData.total_hours.toFixed(1)}h (total)</td><td>-</td><td>${summaryData.average_grade.toFixed(1)}% (avg)</td><td>${summaryData.total_weight}% (graded)</td><td>-</td>`;
+            const summaryHtml = `<td><strong>Summary for ${subjectName}</strong></td><td>-</td><td>${summaryData.total_hours.toFixed(1)}h (total)</td><td>-</td><td>${summaryData.average_grade.toFixed(1)}% (avg)</td><td>${summaryData.total_weight.toFixed(2)}% (graded)</td><td>-</td>`;
             if (summaryRow) {
                 summaryRow.innerHTML = summaryHtml;
             } else {
                 summaryRow = document.createElement('tr');
                 summaryRow.className = 'summary-row';
                 summaryRow.innerHTML = summaryHtml;
-                tableBody.prepend(summaryRow);
+                assignmentTableBody.prepend(summaryRow);
             }
         } else if (summaryRow) {
             summaryRow.remove();
         }
     }
 
-    async function handleSave(row) {
+    function applyWeightPreview(newAssignmentRow) {
+        revertWeightPreview();
+        const subject = newAssignmentRow.querySelector('input[name="subject"]').value;
+        const category = newAssignmentRow.querySelector('select[name="category"]').value;
+        if (!subject || !category) return;
+        const categoryData = (weightCategoriesMap[subject] || []).find(c => c.name === category);
+        if (!categoryData) return;
+        const existingRows = Array.from(assignmentTableBody.querySelectorAll('tr[data-id]')).filter(row => {
+            const cells = row.querySelectorAll('td');
+            return cells.length > 1 && cells[0].textContent.trim() === subject && cells[1].querySelector('.category-tag').lastChild.textContent.trim() === category;
+        });
+        const newTotalAssessments = existingRows.length + 1;
+        const newCalculatedWeight = newTotalAssessments > 0 ? (categoryData.total_weight / newTotalAssessments) : 0;
+        newAssignmentRow.querySelector('input[name="weight"]').value = newCalculatedWeight.toFixed(2);
+        existingRows.forEach(row => {
+            const weightCell = row.querySelectorAll('td')[5];
+            weightPreviewState.set(row, weightCell.innerHTML);
+            weightCell.innerHTML = `<em>${newCalculatedWeight.toFixed(2)}%</em>`;
+        });
+    }
+
+    function revertWeightPreview() {
+        weightPreviewState.forEach((originalHtml, row) => {
+            const weightCell = row.querySelectorAll('td')[5];
+            if (weightCell) weightCell.innerHTML = originalHtml;
+        });
+        weightPreviewState.clear();
+    }
+
+    function renderAssignmentTable(assignments, summaryData, subject) {
+        assignmentTableBody.innerHTML = '';
+        if (summaryData) {
+            const summaryRow = document.createElement('tr');
+            summaryRow.className = 'summary-row';
+            summaryRow.innerHTML = `<td><strong>Summary for ${subject}</strong></td><td>-</td><td>${summaryData.total_hours.toFixed(1)}h (total)</td><td>-</td><td>${summaryData.average_grade.toFixed(1)}% (avg)</td><td>${summaryData.total_weight.toFixed(2)}% (graded)</td><td>-</td>`;
+            assignmentTableBody.appendChild(summaryRow);
+        }
+        assignments.forEach(log => {
+            const row = document.createElement('tr');
+            row.dataset.id = log.id;
+            row.innerHTML = `<td>${log.subject}</td><td><span class="category-tag"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"></path><line x1="7" y1="7" x2="7.01" y2="7"></line></svg> ${log.category}</span></td><td>${parseFloat(log.study_time).toFixed(1)} hours</td><td>${log.assignment_name}</td><td>${log.grade !== null ? log.grade + '%' : '-'}</td><td>${parseFloat(log.weight).toFixed(2)}%</td><td><button class="action-btn edit-btn">Edit</button><button class="action-btn delete-btn">Delete</button></td>`;
+            assignmentTableBody.appendChild(row);
+        });
+    }
+
+    function updateCategoryTableRow(subject, categoryName) {
+        if (!categoryTableBody) return;
+        const categoryRow = Array.from(categoryTableBody.querySelectorAll('tr')).find(r => r.dataset.name === categoryName);
+        if (!categoryRow) return;
+        const categoryData = (weightCategoriesMap[subject] || []).find(c => c.name === categoryName);
+        if (!categoryData) return;
+        const numAssessments = Array.from(assignmentTableBody.querySelectorAll('tr[data-id]')).filter(r => {
+            const cells = r.querySelectorAll('td');
+            return cells.length > 1 && cells[0].textContent.trim() === subject && cells[1].querySelector('.category-tag')?.lastChild.textContent.trim() === categoryName;
+        }).length;
+        categoryRow.querySelector('.num-assessments').textContent = numAssessments;
+        const newCalculatedWeight = numAssessments > 0 ? `${(categoryData.total_weight / numAssessments).toFixed(2)}%` : 'N/A';
+        categoryRow.querySelector('.calculated-weight').textContent = newCalculatedWeight;
+    }
+
+    async function handleAssignmentSave(row) {
+        // --- FIX: Do not revert the preview if validation fails ---
         if (!validateRow(row)) return;
+        revertWeightPreview(); // Only revert on successful validation
+
         const logId = row.dataset.id;
         const isNew = !logId;
         const url = isNew ? '/add' : `/update/${logId}`;
         const formData = new FormData();
-        row.querySelectorAll('input').forEach(input => formData.append(input.name, input.value));
-        const filterDropdown = document.getElementById('subject-filter');
-        const currentFilter = filterDropdown ? filterDropdown.value : 'all';
-        formData.append('current_filter', currentFilter);
+        row.querySelectorAll('input, select').forEach(el => formData.append(el.name, el.value));
+        const currentSubjectFilter = subjectFilterDropdown.value;
+        formData.append('current_filter', currentSubjectFilter);
         try {
-            const response = await fetch(url, { method: 'POST', body: formData });
+            const response = await fetch(url, {
+                method: 'POST',
+                body: formData
+            });
             const result = await response.json();
-            if (!response.ok) { showToast(result.message, 'error'); return; }
+            if (!response.ok) {
+                showToast(result.message, 'error');
+                return;
+            }
             showToast(result.message, 'success');
-            const savedLog = result.log;
-            updateSummaryRow(result.summary, currentFilter);
-            if (currentFilter && currentFilter !== 'all' && savedLog.subject !== currentFilter) {
-                row.remove();
-            } else {
-                row.innerHTML = `<td>${savedLog.subject}</td><td>${parseFloat(savedLog.study_time).toFixed(1)} hours</td><td>${savedLog.assignment_name}</td><td>${savedLog.grade !== null ? savedLog.grade + '%' : '-'}</td><td>${savedLog.weight}%</td><td><button class="action-btn edit-btn">Edit</button><button class="action-btn delete-btn">Delete</button></td>`;
-                if (isNew) { row.dataset.id = savedLog.id; }
+            renderAssignmentTable(result.updated_assignments, result.summary, currentSubjectFilter);
+            if (isNew) {
+                updateCategoryTableRow(result.log.subject, result.log.category);
             }
         } catch (error) {
             console.error('Save failed:', error);
             showToast('A network error occurred.', 'error');
         }
     }
-    
-    // --- Event Listeners ---
+
+    async function handleCategorySave(row) {
+        if (!validateRow(row)) return;
+        const catId = row.dataset.id;
+        const isNew = !catId;
+        const url = isNew ? '/category/add' : `/category/update/${catId}`;
+        const formData = new FormData();
+        row.querySelectorAll('input').forEach(input => formData.append(input.name, input.value));
+        const subject = subjectFilterDropdown.value;
+        formData.append('subject', subject);
+        try {
+            const response = await fetch(url, {
+                method: 'POST',
+                body: formData
+            });
+            const result = await response.json();
+            if (!response.ok) {
+                showToast(result.message, 'error');
+                return;
+            }
+            showToast(result.message, 'success');
+            // Instead of complex logic, just reload the page to see category changes
+            window.location.reload();
+        } catch (error) {
+            console.error('Category save failed:', error);
+            showToast('A network error occurred.', 'error');
+        }
+    }
 
     if (confirmNoBtn) {
         confirmNoBtn.addEventListener('click', hideConfirmation);
     }
-    
     if (confirmYesBtn) {
         confirmYesBtn.addEventListener('click', async function() {
-            if (rowToDelete) {
-                const logId = rowToDelete.dataset.id;
-                if (!logId) { rowToDelete.remove(); hideConfirmation(); return; }
-                const filterDropdown = document.getElementById('subject-filter');
-                const currentFilter = filterDropdown ? filterDropdown.value : 'all';
+            if (itemToDelete.row) {
+                const {
+                    row,
+                    type
+                } = itemToDelete;
+                if (type === 'assignment' && !row.dataset.id) {
+                    revertWeightPreview();
+                }
+                const itemId = row.dataset.id;
+                if (!itemId) {
+                    row.remove();
+                    hideConfirmation();
+                    return;
+                }
+                const isAssignment = type === 'assignment';
+                const url = isAssignment ? `/delete/${itemId}` : `/category/delete/${itemId}`;
+                const currentFilter = subjectFilterDropdown.value;
                 try {
-                    const response = await fetch(`/delete/${logId}?current_filter=${currentFilter}`, { method: 'POST' });
+                    const response = await fetch(`${url}?current_filter=${currentFilter}`, {
+                        method: 'POST'
+                    });
                     const result = await response.json();
                     showToast(result.message, response.ok ? 'success' : 'error');
                     if (response.ok) {
-                        updateSummaryRow(result.summary, currentFilter);
-                        rowToDelete.remove();
+                        if (isAssignment) {
+                            renderAssignmentTable(result.updated_assignments, result.summary, currentFilter);
+                            const categoryName = row.querySelectorAll('td')[1].querySelector('.category-tag').lastChild.textContent.trim();
+                            updateCategoryTableRow(currentFilter, categoryName);
+                        } else {
+                            window.location.reload(); // Reload to see category deletion reflected
+                        }
                     }
                 } catch (error) {
                     console.error("Delete failed:", error);
@@ -180,73 +294,187 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    if (addRowBtn) {
-        addRowBtn.addEventListener('click', function() {
+    if (addCategoryBtn) {
+        addCategoryBtn.addEventListener('click', function() {
             const newRow = document.createElement('tr');
-            const filterDropdown = document.getElementById('subject-filter');
-            const currentFilter = filterDropdown ? filterDropdown.value : 'all';
-            const defaultValue = (currentFilter && currentFilter !== 'all') ? currentFilter : '';
-            const placeholderText = defaultValue ? '' : 'Type or select';
-            const subjectInputHtml = `<input type="text" name="subject" value="${defaultValue}" placeholder="${placeholderText}" required list="subject-list">`;
-            const gradeAttributes = isGradeLockOn ? 'min="0" max="100"' : 'min="0"';
-            const weightAttributes = 'min="0" max="100"';
-            newRow.innerHTML = `<td>${subjectInputHtml}</td><td><input type="number" name="study_time" step="0.1" min="0" required></td><td><input type="text" name="assignment_name" required></td><td><input type="number" name="grade" ${gradeAttributes} placeholder="Optional"></td><td><input type="number" name="weight" ${weightAttributes} required></td><td><button class="action-btn save-btn">Save</button><button class="action-btn delete-btn">Delete</button></td>`;
-            tableBody.appendChild(newRow); 
+            newRow.innerHTML = `<td><input type="text" name="name" required></td><td><input type="number" name="total_weight" min="0" max="100" required></td><td class="num-assessments">0</td><td class="calculated-weight">N/A</td><td><input type="text" name="default_name" placeholder="e.g., Quiz #"></td><td><button class="action-btn save-btn">Save</button><button class="action-btn delete-btn">Delete</button></td>`;
+            categoryTableBody.appendChild(newRow);
         });
     }
 
-    if (tableBody) {
-        // This is the main click handler that was broken. It is now complete.
-        tableBody.addEventListener('click', async function (event) {
-            if (!event.target.classList.contains('action-btn')) return;
-            const button = event.target;
+    if (categoryTableBody) {
+        categoryTableBody.addEventListener('click', async function(event) {
+            const button = event.target.closest('.action-btn');
+            if (!button) return;
             const row = button.closest('tr');
-
-            // THIS IS THE RESTORED EDIT LOGIC
             if (button.classList.contains('edit-btn')) {
                 button.textContent = 'Save';
                 button.classList.remove('edit-btn');
                 button.classList.add('save-btn');
                 const cells = row.querySelectorAll('td');
-                const gradeText = cells[3].textContent.trim();
-                const gradeValue = gradeText === '-' ? '' : parseInt(gradeText, 10);
-                const gradeAttributes = isGradeLockOn ? 'min="0" max="100"' : 'min="0"';
-                const weightAttributes = 'min="0" max="100"';
-                cells[0].innerHTML = `<input type="text" name="subject" value="${cells[0].textContent.trim()}" required list="subject-list">`;
-                cells[1].innerHTML = `<input type="number" name="study_time" value="${(parseFloat(cells[1].textContent) || 0).toFixed(1)}" step="0.1" min="0" required>`;
-                cells[2].innerHTML = `<input type="text" name="assignment_name" value="${cells[2].textContent.trim()}" required>`;
-                cells[3].innerHTML = `<input type="number" name="grade" value="${gradeValue}" ${gradeAttributes} placeholder="Optional">`;
-                cells[4].innerHTML = `<input type="number" name="weight" value="${parseInt(cells[4].textContent, 10) || 0}" ${weightAttributes} required>`;
+                cells[0].innerHTML = `<input type="text" name="name" value="${cells[0].textContent.trim()}" required>`;
+                cells[1].innerHTML = `<input type="number" name="total_weight" value="${parseInt(cells[1].textContent, 10) || 0}" min="0" max="100" required>`;
+                cells[4].innerHTML = `<input type="text" name="default_name" value="${cells[4].textContent.trim() === '-' ? '' : cells[4].textContent.trim()}" placeholder="e.g., Quiz #">`;
             } else if (button.classList.contains('save-btn')) {
-                await handleSave(row);
+                await handleCategorySave(row);
             } else if (button.classList.contains('delete-btn')) {
-                showConfirmation("Are you sure you want to delete this assignment?", row);
+                showConfirmation("Delete this category definition? This cannot be undone.", row, 'category');
             }
         });
 
-        tableBody.addEventListener('input', function(event) {
-            if (event.target.matches('input')) {
-                showValidationAlert([]);
-                event.target.classList.remove('input-error');
-            }
-        });
-        
-        tableBody.addEventListener('keydown', async function(event) {
+        // --- NEW: Add keydown listener for the category table ---
+        categoryTableBody.addEventListener('keydown', async function(event) {
             if (event.key === 'Enter' && event.target.matches('input')) {
                 event.preventDefault();
-                await handleSave(event.target.closest('tr'));
+                const row = event.target.closest('tr');
+                if (row) {
+                    await handleCategorySave(row);
+                }
             }
         });
     }
 
-    // Chart rendering logic
+    if (addRowBtn) {
+        addRowBtn.addEventListener('click', function() {
+            revertWeightPreview();
+            const newRow = document.createElement('tr');
+            const currentSubject = subjectFilterDropdown.value;
+            const subjectDefault = (currentSubject !== 'all') ? currentSubject : '';
+            const gradeAttrs = isGradeLockOn ? 'min="0" max="100"' : 'min="0"';
+            const categorySelect = document.createElement('select');
+            categorySelect.name = 'category';
+            categorySelect.required = true;
+            categorySelect.innerHTML = `<option value="" disabled selected>Select subject first</option>`;
+            const td = document.createElement('td');
+            td.appendChild(categorySelect);
+            newRow.innerHTML = `<td><input type="text" name="subject" value="${subjectDefault}" placeholder="${subjectDefault ? '' : 'Type or select'}" required list="subject-list"></td>${td.outerHTML}<td><input type="number" name="study_time" step="0.1" min="0" required></td><td><input type="text" name="assignment_name" required></td><td><input type="number" name="grade" ${gradeAttrs} placeholder="Optional"></td><td><input type="number" name="weight" required readonly style="background-color: #eee;"></td><td><button class="action-btn save-btn">Save</button><button class="action-btn delete-btn">Delete</button></td>`;
+            assignmentTableBody.appendChild(newRow);
+            const subjectInput = newRow.querySelector('input[name="subject"]');
+            if (subjectInput.value) {
+                subjectInput.dispatchEvent(new Event('input', {
+                    bubbles: true
+                }));
+            }
+        });
+    }
+
+    if (assignmentTableBody) {
+        assignmentTableBody.addEventListener('click', async function(event) {
+            const button = event.target.closest('.action-btn');
+            if (!button) return;
+            const row = button.closest('tr');
+            if (button.classList.contains('edit-btn')) {
+                revertWeightPreview();
+                button.textContent = 'Save';
+                button.classList.remove('edit-btn');
+                button.classList.add('save-btn');
+                const cells = row.querySelectorAll('td');
+                const subjectText = cells[0].textContent.trim();
+                const categoryText = cells[1].querySelector('.category-tag').lastChild.textContent.trim();
+                const gradeText = cells[4].textContent.trim();
+                const gradeValue = gradeText === '-' ? '' : parseInt(gradeText, 10);
+                const gradeAttributes = isGradeLockOn ? 'min="0" max="100"' : 'min="0"';
+                const categorySelect = document.createElement('select');
+                categorySelect.name = 'category';
+                categorySelect.required = true;
+                if (weightCategoriesMap[subjectText]) {
+                    weightCategoriesMap[subjectText].forEach(cat => {
+                        const option = new Option(cat.name, cat.name);
+                        if (cat.name === categoryText) option.selected = true;
+                        categorySelect.add(option);
+                    });
+                }
+                cells[0].innerHTML = `<input type="text" name="subject" value="${subjectText}" required list="subject-list">`;
+                cells[1].innerHTML = '';
+                cells[1].appendChild(categorySelect);
+                cells[2].innerHTML = `<input type="number" name="study_time" value="${(parseFloat(cells[2].textContent) || 0).toFixed(1)}" step="0.1" min="0" required>`;
+                cells[3].innerHTML = `<input type="text" name="assignment_name" value="${cells[3].textContent.trim()}" required>`;
+                cells[4].innerHTML = `<input type="number" name="grade" value="${gradeValue}" ${gradeAttributes} placeholder="Optional">`;
+                cells[5].innerHTML = `<input type="number" name="weight" value="${parseFloat(cells[5].textContent) || 0}" required readonly style="background-color: #eee;">`;
+            } else if (button.classList.contains('save-btn')) {
+                await handleAssignmentSave(row);
+            } else if (button.classList.contains('delete-btn')) {
+                showConfirmation("Are you sure you want to delete this assignment?", row, 'assignment');
+            }
+        });
+        assignmentTableBody.addEventListener('input', function(event) {
+            if (event.target.matches('input')) {
+                showValidationAlert([]);
+                event.target.classList.remove('input-error');
+            }
+            if (event.target.name === 'subject') {
+                const subjectValue = event.target.value;
+                const row = event.target.closest('tr');
+                const categorySelect = row.querySelector('select[name="category"]');
+                categorySelect.innerHTML = '<option value="" disabled selected>Select category</option>';
+                if (subjectValue && weightCategoriesMap[subjectValue]) {
+                    weightCategoriesMap[subjectValue].forEach(cat => {
+                        categorySelect.add(new Option(cat.name, cat.name));
+                    });
+                }
+            }
+        });
+        assignmentTableBody.addEventListener('change', function(event) {
+            const target = event.target;
+            if (target.name === 'category') {
+                const row = target.closest('tr');
+                if (!row.dataset.id) {
+                    applyWeightPreview(row);
+                }
+                const subject = row.querySelector('input[name="subject"]').value;
+                const categoryName = target.value;
+                const categoryData = (weightCategoriesMap[subject] || []).find(c => c.name === categoryName);
+                if (categoryData) {
+                    const nameInput = row.querySelector('input[name="assignment_name"]');
+                    if (categoryData.default_name) {
+                        if (categoryData.default_name.includes('#')) {
+                            const existingCount = Array.from(document.querySelectorAll('#study-table-body tr[data-id]')).filter(r => r.querySelectorAll('td')[1].textContent.trim().includes(categoryName)).length;
+                            nameInput.value = categoryData.default_name.replace('#', existingCount + 1);
+                        } else {
+                            nameInput.value = categoryData.default_name;
+                        }
+                    }
+                }
+            }
+        });
+        assignmentTableBody.addEventListener('keydown', async function(event) {
+            if (event.key === 'Enter' && event.target.matches('input, select')) {
+                event.preventDefault();
+                showValidationAlert([]); // Clear old errors before trying to save all
+                const editedRows = assignmentTableBody.querySelectorAll('tr:has(.save-btn)');
+                for (const row of editedRows) {
+                    await handleAssignmentSave(row);
+                }
+            }
+        });
+    }
+
     const ctx = document.getElementById('hoursPieChart');
     if (ctx) {
         try {
             const chartLabels = JSON.parse(document.body.dataset.chartLabels);
             const chartValues = JSON.parse(document.body.dataset.chartValues);
             if (chartLabels && chartLabels.length > 0) {
-                new Chart(ctx.getContext('2d'), { type: 'pie', data: { labels: chartLabels, datasets: [{ label: 'Hours Studied', data: chartValues, backgroundColor: ['#ff6384','#36a2eb','#ffce56','#4bc0c0','#9966ff','#ff9f40'], borderWidth: 1 }] }, options: { responsive: true, plugins: { legend: { position: 'top' } } } });
+                new Chart(ctx.getContext('2d'), {
+                    type: 'pie',
+                    data: {
+                        labels: chartLabels,
+                        datasets: [{
+                            label: 'Hours Studied',
+                            data: chartValues,
+                            backgroundColor: ['#ff6384', '#36a2eb', '#ffce56', '#4bc0c0', '#9966ff', '#ff9f40'],
+                            borderWidth: 1
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        plugins: {
+                            legend: {
+                                position: 'top'
+                            }
+                        }
+                    }
+                });
             }
         } catch (e) {
             console.error("Failed to parse chart data:", e);
