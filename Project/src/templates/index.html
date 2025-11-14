@@ -21,11 +21,14 @@
                 <form id="filter-form" method="GET" action="/"><label for="subject-filter">Filter by Subject:</label><select name="subject" id="subject-filter" onchange="this.form.submit()"><option value="all">All Subjects</option>{% for subject in subjects %}<option value="{{ subject }}" {% if subject == selected_subject %}selected{% endif %}>{{ subject }}</option>{% endfor %}</select>
                     {% if selected_subject and selected_subject != 'all' and subject_categories_map_py[selected_subject] %}<label for="category-filter">Category:</label><select name="category" id="category-filter" onchange="this.form.submit()"><option value="all">All Categories</option>{% for category in subject_categories_map_py[selected_subject] %}<option value="{{ category }}" {% if category == selected_category %}selected{% endif %}>{{ category }}</option>{% endfor %}</select>{% endif %}
                 </form>
+                {% if not selected_subject or selected_subject == 'all' %}
+                <button type="button" id="add-subject-btn" class="subject-action-btn">+ Add Subject</button>
+                {% elif selected_subject and selected_subject != 'all' %}
+                <button type="button" id="delete-subject-btn" class="subject-action-btn delete-subject-btn" data-subject="{{ selected_subject }}">Delete Subject</button>
+                {% endif %}
                 <button type="button" id="grade-lock-btn" class="grade-lock-btn lock-on">Grade Lock: ON</button>
             </div>
-            
-            <datalist id="subject-list">{% for subject in subjects %}<option value="{{ subject }}"></option>{% endfor %}</datalist>
-            
+
             <h2>Assignments</h2>
             <div class="table-container">
                 <table>
@@ -118,6 +121,7 @@
                         </td>
                         <td>
                             <button type="button" id="predict-btn" class="action-btn">Predict</button>
+                            <button type="button" id="reset-predictor-btn" class="action-btn" style="background-color: #6c757d; border-color: #6c757d; color: white;">Reset</button>
                         </td>
                     </tr>
                 </tbody>
@@ -133,6 +137,39 @@
             <div class="modal-buttons">
                 <button id="modal-confirm-yes">Yes, Delete</button>
                 <button id="modal-confirm-no">No, Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="add-subject-modal" class="modal-overlay">
+        <div class="modal-content">
+            <h3 style="margin-top: 0;">Add New Subject</h3>
+            <input type="text" id="new-subject-input" placeholder="Enter subject name..." style="width: 100%; padding: 10px; margin-bottom: 1em; box-sizing: border-box; border: 1px solid #ccc; border-radius: 4px;">
+            <div class="modal-buttons">
+                <button id="subject-modal-confirm">Add Subject</button>
+                <button id="subject-modal-cancel">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="delete-subject-modal" class="modal-overlay">
+        <div class="modal-content">
+            <h3 style="margin-top: 0; color: #dc3545;">Delete Subject</h3>
+            <p id="delete-subject-message"></p>
+            <div class="modal-buttons">
+                <button id="delete-subject-confirm" style="background-color: #dc3545;">Continue</button>
+                <button id="delete-subject-cancel" style="background-color: #6c757d;">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="delete-subject-final-modal" class="modal-overlay">
+        <div class="modal-content">
+            <h3 style="margin-top: 0; color: #dc3545;">⚠️ FINAL WARNING</h3>
+            <p id="delete-subject-final-message"></p>
+            <div class="modal-buttons">
+                <button id="delete-subject-final-confirm" style="background-color: #dc3545; font-weight: bold;">Yes, Delete Forever</button>
+                <button id="delete-subject-final-cancel" style="background-color: #6c757d;">No, Cancel</button>
             </div>
         </div>
     </div>
