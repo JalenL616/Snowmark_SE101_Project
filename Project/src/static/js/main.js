@@ -722,13 +722,21 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
 
-        // Clear predicted value styling when user edits target grade
+        // Clear predicted value when user edits target grade
         const targetGradeInput = document.getElementById('target_grade');
         if (targetGradeInput) {
             targetGradeInput.addEventListener('input', function() {
-                // Remove green styling
+                // Remove green styling from target grade (user is switching to predict hours mode)
                 this.style.color = '';
                 this.style.fontWeight = '';
+
+                // Completely clear hours value and styling (if it was predicted)
+                const hoursInput = document.getElementById('hours');
+                if (hoursInput) {
+                    hoursInput.value = '';
+                    hoursInput.style.color = '';
+                    hoursInput.style.fontWeight = '';
+                }
 
                 // Clear prediction result
                 const resultDiv = document.getElementById('prediction-result');
@@ -741,13 +749,21 @@ document.addEventListener('DOMContentLoaded', function() {
             });
         }
 
-        // Clear predicted value styling when user edits hours
+        // Clear predicted value when user edits hours
         const hoursInput = document.getElementById('hours');
         if (hoursInput) {
             hoursInput.addEventListener('input', function() {
-                // Remove blue styling
+                // Remove blue styling from hours (user is switching to predict grade mode)
                 this.style.color = '';
                 this.style.fontWeight = '';
+
+                // Completely clear target grade value and styling (if it was predicted)
+                const targetGradeInput = document.getElementById('target_grade');
+                if (targetGradeInput) {
+                    targetGradeInput.value = '';
+                    targetGradeInput.style.color = '';
+                    targetGradeInput.style.fontWeight = '';
+                }
 
                 // Clear prediction result
                 const resultDiv = document.getElementById('prediction-result');
