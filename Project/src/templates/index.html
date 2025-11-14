@@ -96,11 +96,18 @@
                 <tbody>
                     <tr>
                         <td>
+                            {% if selected_subject and selected_subject != 'all' %}
+                            <select name="subject" id="predict-subject" disabled style="background-color: #eee;">
+                                <option value="{{ selected_subject }}" selected>{{ selected_subject }}</option>
+                            </select>
+                            {% else %}
                             <select name="subject" id="predict-subject">
+                                <option value="" disabled selected>-- Select Subject --</option>
                                 {% for subject in subjects %}
                                 <option value="{{ subject }}">{{ subject }}</option>
                                 {% endfor %}
                             </select>
+                            {% endif %}
                         </td>
                         <td>
                             <select name="category" id="predict-category">

@@ -131,7 +131,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     function applyWeightPreview(newAssignmentRow) {
         revertWeightPreview();
-        const subject = newAssignmentRow.querySelector('input[name="subject"]').value;
+        const subject = newAssignmentRow.querySelector('select[name="subject"]').value;
         const category = newAssignmentRow.querySelector('select[name="category"]').value;
         if (!subject || !category) return;
         const categoryData = (weightCategoriesMap[subject] || []).find(c => c.name === category);
@@ -423,26 +423,32 @@ document.addEventListener('DOMContentLoaded', function() {
             subjectSelect.name = 'subject';
             subjectSelect.required = true;
 
-            // Add default option if no subject filter is active
-            if (!subjectDefault) {
+            // If viewing a specific subject, lock it to that subject
+            if (subjectDefault) {
+                subjectSelect.style.backgroundColor = '#eee';
+                subjectSelect.style.pointerEvents = 'none'; // Prevent interaction
+                const option = document.createElement('option');
+                option.value = subjectDefault;
+                option.textContent = subjectDefault;
+                option.selected = true;
+                subjectSelect.appendChild(option);
+            } else {
+                // Add default option if no subject filter is active
                 const defaultOpt = document.createElement('option');
                 defaultOpt.value = '';
                 defaultOpt.disabled = true;
                 defaultOpt.selected = true;
                 defaultOpt.textContent = '-- Select Subject --';
                 subjectSelect.appendChild(defaultOpt);
-            }
 
-            // Add all subjects
-            allSubjects.forEach(subject => {
-                const option = document.createElement('option');
-                option.value = subject;
-                option.textContent = subject;
-                if (subject === subjectDefault) {
-                    option.selected = true;
-                }
-                subjectSelect.appendChild(option);
-            });
+                // Add all subjects
+                allSubjects.forEach(subject => {
+                    const option = document.createElement('option');
+                    option.value = subject;
+                    option.textContent = subject;
+                    subjectSelect.appendChild(option);
+                });
+            }
 
             const subjectTd = document.createElement('td');
             subjectTd.appendChild(subjectSelect);
@@ -552,7 +558,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (!row.dataset.id) {
                     applyWeightPreview(row);
                 }
-                const subject = row.querySelector('input[name="subject"]').value;
+                const subject = row.querySelector('select[name="subject"]').value;
                 const categoryName = target.value;
                 const categoryData = (weightCategoriesMap[subject] || []).find(c => c.name === categoryName);
                 if (categoryData) {
