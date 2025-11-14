@@ -712,17 +712,50 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // --- Add Subject Button Handler ---
     const addSubjectBtn = document.getElementById('add-subject-btn');
-    if (addSubjectBtn) {
+    const addSubjectModal = document.getElementById('add-subject-modal');
+    const newSubjectInput = document.getElementById('new-subject-input');
+    const subjectModalConfirm = document.getElementById('subject-modal-confirm');
+    const subjectModalCancel = document.getElementById('subject-modal-cancel');
+
+    if (addSubjectBtn && addSubjectModal) {
         addSubjectBtn.addEventListener('click', function() {
-            const subjectName = prompt('Enter new subject name:');
-            if (!subjectName || !subjectName.trim()) {
+            addSubjectModal.style.display = 'flex';
+            newSubjectInput.value = '';
+            newSubjectInput.focus();
+        });
+
+        subjectModalCancel.addEventListener('click', function() {
+            addSubjectModal.style.display = 'none';
+        });
+
+        // Allow Enter key to submit
+        newSubjectInput.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                subjectModalConfirm.click();
+            }
+        });
+
+        // Allow Escape key to cancel
+        addSubjectModal.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                addSubjectModal.style.display = 'none';
+            }
+        });
+
+        subjectModalConfirm.addEventListener('click', function() {
+            const subjectName = newSubjectInput.value.trim();
+
+            if (!subjectName) {
+                showToast('Subject name cannot be empty', 'error');
                 return;
             }
+
+            addSubjectModal.style.display = 'none';
 
             fetch('/add_subject', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-                body: new URLSearchParams({subject_name: subjectName.trim()})
+                body: new URLSearchParams({subject_name: subjectName})
             })
             .then(response => response.json())
             .then(data => {
@@ -741,29 +774,47 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // --- Delete Subject Button Handler with Double Confirmation ---
     const deleteSubjectBtn = document.getElementById('delete-subject-btn');
-    if (deleteSubjectBtn) {
+    const deleteSubjectModal = document.getElementById('delete-subject-modal');
+    const deleteSubjectMessage = document.getElementById('delete-subject-message');
+    const deleteSubjectConfirm = document.getElementById('delete-subject-confirm');
+    const deleteSubjectCancel = document.getElementById('delete-subject-cancel');
+
+    const deleteSubjectFinalModal = document.getElementById('delete-subject-final-modal');
+    const deleteSubjectFinalMessage = document.getElementById('delete-subject-final-message');
+    const deleteSubjectFinalConfirm = document.getElementById('delete-subject-final-confirm');
+    const deleteSubjectFinalCancel = document.getElementById('delete-subject-final-cancel');
+
+    if (deleteSubjectBtn && deleteSubjectModal && deleteSubjectFinalModal) {
+        let subjectToDelete = '';
+
         deleteSubjectBtn.addEventListener('click', function() {
-            const subjectName = this.dataset.subject;
+            subjectToDelete = this.dataset.subject;
+            deleteSubjectMessage.textContent = `Are you sure you want to delete the subject "${subjectToDelete}"?\n\nThis will delete ALL assignments and categories for this subject.`;
+            deleteSubjectModal.style.display = 'flex';
+        });
 
-            // First confirmation
-            const firstConfirm = confirm(`Are you sure you want to delete the subject "${subjectName}"?\n\nThis will delete ALL assignments and categories for this subject.\n\nClick OK to continue.`);
+        deleteSubjectCancel.addEventListener('click', function() {
+            deleteSubjectModal.style.display = 'none';
+        });
 
-            if (!firstConfirm) {
-                return;
-            }
+        deleteSubjectConfirm.addEventListener('click', function() {
+            deleteSubjectModal.style.display = 'none';
+            deleteSubjectFinalMessage.textContent = `This action cannot be undone!\n\nDelete "${subjectToDelete}" and all its data permanently?`;
+            deleteSubjectFinalModal.style.display = 'flex';
+        });
 
-            // Second confirmation
-            const secondConfirm = confirm(`FINAL WARNING: This action cannot be undone!\n\nDelete "${subjectName}" and all its data permanently?`);
+        deleteSubjectFinalCancel.addEventListener('click', function() {
+            deleteSubjectFinalModal.style.display = 'none';
+        });
 
-            if (!secondConfirm) {
-                return;
-            }
+        deleteSubjectFinalConfirm.addEventListener('click', function() {
+            deleteSubjectFinalModal.style.display = 'none';
 
             // Proceed with deletion
             fetch('/delete_subject', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-                body: new URLSearchParams({subject_name: subjectName})
+                body: new URLSearchParams({subject_name: subjectToDelete})
             })
             .then(response => response.json())
             .then(data => {
@@ -778,6 +829,19 @@ document.addEventListener('DOMContentLoaded', function() {
             .catch(error => {
                 showToast('Error deleting subject: ' + error.message, 'error');
             });
+        });
+
+        // Allow Escape key to cancel on both modals
+        deleteSubjectModal.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                deleteSubjectModal.style.display = 'none';
+            }
+        });
+
+        deleteSubjectFinalModal.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                deleteSubjectFinalModal.style.display = 'none';
+            }
         });
     }
 

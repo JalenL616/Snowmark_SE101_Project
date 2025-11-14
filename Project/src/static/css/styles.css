@@ -82,11 +82,16 @@ input, select { width: 95%; padding: 8px; box-sizing: border-box; border-radius:
     left: 0;
     width: 100%;
     height: 100%;
-    background-color: rgba(0, 0, 0, 0.5);
+    background-color: rgba(0, 0, 0, 0.6);
     display: none; /* Hidden by default */
     justify-content: center;
     align-items: center;
     z-index: 10000;
+    animation: fadeIn 0.2s ease;
+}
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
 }
 .modal-content {
     background-color: white;
@@ -94,11 +99,21 @@ input, select { width: 95%; padding: 8px; box-sizing: border-box; border-radius:
     border-radius: 8px;
     box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
     text-align: center;
-    max-width: 400px;
+    max-width: 450px;
+    min-width: 350px;
+    animation: slideIn 0.3s ease;
+}
+@keyframes slideIn {
+    from { transform: translateY(-50px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
 }
 .modal-content p {
     margin: 0 0 1.5em 0;
     font-size: 1.1em;
+}
+.modal-content h3 {
+    margin-bottom: 1em;
+    color: #333;
 }
 .modal-buttons button {
     padding: 10px 20px;
@@ -107,14 +122,32 @@ input, select { width: 95%; padding: 8px; box-sizing: border-box; border-radius:
     cursor: pointer;
     margin: 0 10px;
     font-weight: bold;
+    font-size: 1em;
+    transition: background-color 0.2s ease;
 }
-#modal-confirm-yes {
+.modal-buttons button:hover {
+    opacity: 0.9;
+    transform: translateY(-1px);
+}
+#modal-confirm-yes, #subject-modal-confirm, #delete-subject-confirm, #delete-subject-final-confirm {
     background-color: #dc3545;
     color: white;
 }
-#modal-confirm-no {
+#modal-confirm-yes:hover, #delete-subject-confirm:hover, #delete-subject-final-confirm:hover {
+    background-color: #c82333;
+}
+#subject-modal-confirm {
+    background-color: #007bff;
+}
+#subject-modal-confirm:hover {
+    background-color: #0056b3;
+}
+#modal-confirm-no, #subject-modal-cancel, #delete-subject-cancel, #delete-subject-final-cancel {
     background-color: #6c757d;
     color: white;
+}
+#modal-confirm-no:hover, #subject-modal-cancel:hover, #delete-subject-cancel:hover, #delete-subject-final-cancel:hover {
+    background-color: #5a6268;
 }
 
 /* Predictor Section - Matches Category Section Styling */

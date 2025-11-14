@@ -142,6 +142,39 @@
         </div>
     </div>
 
+    <div id="add-subject-modal" class="modal-overlay">
+        <div class="modal-content">
+            <h3 style="margin-top: 0;">Add New Subject</h3>
+            <input type="text" id="new-subject-input" placeholder="Enter subject name..." style="width: 100%; padding: 10px; margin-bottom: 1em; box-sizing: border-box; border: 1px solid #ccc; border-radius: 4px;">
+            <div class="modal-buttons">
+                <button id="subject-modal-confirm">Add Subject</button>
+                <button id="subject-modal-cancel">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="delete-subject-modal" class="modal-overlay">
+        <div class="modal-content">
+            <h3 style="margin-top: 0; color: #dc3545;">Delete Subject</h3>
+            <p id="delete-subject-message"></p>
+            <div class="modal-buttons">
+                <button id="delete-subject-confirm" style="background-color: #dc3545;">Continue</button>
+                <button id="delete-subject-cancel" style="background-color: #6c757d;">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="delete-subject-final-modal" class="modal-overlay">
+        <div class="modal-content">
+            <h3 style="margin-top: 0; color: #dc3545;">⚠️ FINAL WARNING</h3>
+            <p id="delete-subject-final-message"></p>
+            <div class="modal-buttons">
+                <button id="delete-subject-final-confirm" style="background-color: #dc3545; font-weight: bold;">Yes, Delete Forever</button>
+                <button id="delete-subject-final-cancel" style="background-color: #6c757d;">No, Cancel</button>
+            </div>
+        </div>
+    </div>
+
     <script src="{{ url_for('static', filename='js/main.js') }}" defer></script>
 </body>
 </html>
