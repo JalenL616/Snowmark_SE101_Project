@@ -1,5 +1,6 @@
 from flask import Flask, render_template, request, url_for, jsonify, session, redirect, flash
 import json
+import math
 from functools import wraps
 
 app = Flask(__name__)
@@ -60,6 +61,143 @@ def calculate_summary(subject):
     weighted_grade_sum = sum(log['grade'] * log['weight'] for log in graded_items)
     average_grade = weighted_grade_sum / total_weight if total_weight > 0 else 0
     return {'total_hours': total_hours, 'average_grade': average_grade, 'total_weight': total_weight}
+
+# --- Estimate k for exponential saturation model ---
+
+def estimate_k(hours_list, grades_list, weights_list, max_grade=100):
+    """
+    Estimate learning efficiency from the relationship between study time and grades.
+    Higher k = more efficient learner (gets better grades with less time)
+    Lower k = needs more time to achieve grades
+    
+    New model: grade = max_grade * (1 - exp(-k * hours / (weight * 10)))
+    Solve for k: k = -ln(1 - grade/max_grade) * (weight * 10) / hours
+    """
+    k_values = []
+    
+    for h, g, w in zip(hours_list, grades_list, weights_list):
+        # Skip extreme cases
+        if h <= 0 or g <= 0 or g >= (max_grade - 1):
+            continue
+            
+        try:
+            # Updated formula with weight in denominator and custom max_grade
+            effective_difficulty = max(0.1, w * 10)
+            k_i = -math.log(1 - g/max_grade) * effective_difficulty / h
+            
+            # Filter unrealistic k values
+            if 0.01 < k_i < 100:
+                k_values.append(k_i)
+        except (ValueError, ZeroDivisionError):
+            continue
+    
+    if not k_values:
+        return 0.3  # Default moderate efficiency
+    
+    # Use median to reduce outlier impact
+    k_values.sort()
+    n = len(k_values)
+    if n % 2 == 0:
+        return (k_values[n//2 - 1] + k_values[n//2]) / 2
+    else:
+        return k_values[n//2]
+
+
+def predict_grade(hours, weight, k, max_grade=100):
+    """
+    Predict grade based on study hours using exponential learning curve.
+    
+    Key insight: Grade depends on hours studied, but weight represents difficulty.
+    - 0 hours = ~0% (even smart students fail without studying)
+    - More hours = diminishing returns (exponential saturation)
+    - Higher weight/difficulty = need more hours for same grade (weight divides)
+    - max_grade sets the upper limit (100 by default, or custom if grade lock off)
+    """
+    if hours <= 0:
+        return 0  # No study = no grade, regardless of past performance
+    
+    # Exponential learning curve with saturation at max_grade
+    # Weight in denominator: harder assignments need more hours
+    # Normalize weight to keep k values reasonable (multiply by 10)
+    effective_difficulty = max(0.1, weight * 10)  # Prevent division issues
+    predicted = max_grade * (1 - math.exp(-k * hours / effective_difficulty))
+    
+    return max(0, min(max_grade, predicted))
+
+
+def required_hours(target_grade, weight, k, max_grade=100):
+    """
+    Calculate hours needed to reach target grade.
+    Higher weight = more hours needed.
+    """
+    if target_grade <= 0:
+        return 0
+    
+    # Allow up to 99.5% of max_grade before calling it impossible
+    # (exponential model asymptotically approaches max_grade)
+    if target_grade >= max_grade * 0.995:
+        return float('inf')
+    
+    try:
+        # Solve: target = max_grade * (1 - exp(-k * hours / (weight * 10)))
+        # hours = -(weight * 10) * ln(1 - target/max_grade) / k
+        effective_difficulty = max(0.1, weight * 10)
+        hours = -effective_difficulty * math.log(1 - target_grade/max_grade) / k
+        return max(0, hours)
+    except (ValueError, ZeroDivisionError):
+        return float('inf')
+
+
+def calculate_confidence(data, hours_or_target, weight):
+    """
+    Calculate confidence score based on:
+    - Number of data points
+    - Similarity to past assignments
+    """
+    n = len(data)
+    
+    # Base confidence from data quantity
+    base_conf = min(80, n * 15)
+    
+    # Bonus if we have similar examples
+    past_hours = [log['study_time'] for log in data]
+    avg_hours = sum(past_hours) / len(past_hours)
+    
+    # Reduce confidence if prediction is far from past experience
+    if abs(hours_or_target - avg_hours) > avg_hours:
+        base_conf *= 0.7
+    
+    return round(base_conf)
+
+
+def find_similar_assignment(data, target_hours):
+    """Find assignment with similar study time for reference"""
+    if not data:
+        return None
+    
+    # Find closest by study time
+    closest = min(data, key=lambda x: abs(x['study_time'] - target_hours))
+    
+    # Only return if reasonably similar (within 50%)
+    if abs(closest['study_time'] - target_hours) / max(target_hours, 0.1) < 0.5:
+        return closest
+    
+    return None
+
+
+def find_similar_grade(data, target_grade):
+    """Find assignment with similar grade for reference"""
+    if not data:
+        return None
+    
+    # Find closest by grade
+    closest = min(data, key=lambda x: abs(x['grade'] - target_grade))
+    
+    # Only return if reasonably similar (within 10 points)
+    if abs(closest['grade'] - target_grade) < 10:
+        return closest
+    
+    return None
 
 @app.route('/')
 @login_required
@@ -252,6 +390,181 @@ def register():
             flash("Account created successfully! Please log in.", "success")
             return redirect(url_for('login'))
     return render_template('register.html')
+
+@app.route('/predict', methods=['POST'])
+@login_required
+def predict():
+    subject = request.form.get('subject')
+    category = request.form.get('category')
+    weight = float(request.form.get('weight', 0))
+    hours = request.form.get('hours')
+    target_grade = request.form.get('target_grade')
+    grade_lock = request.form.get('grade_lock', 'true').lower() == 'true'
+    max_grade = float(request.form.get('max_grade', 100)) if not grade_lock else 100
+    
+    # Try to get category-specific data first
+    category_data = [
+        log for log in study_data 
+        if log['subject'] == subject 
+        and log['category'] == category
+        and log.get('grade') is not None
+    ] if category else []
+    
+    # Fall back to subject-level data if not enough category data
+    subject_data = [
+        log for log in study_data 
+        if log['subject'] == subject 
+        and log.get('grade') is not None
+    ]
+    
+    # Fall back to all data if not enough subject data
+    all_data = [
+        log for log in study_data 
+        if log.get('grade') is not None
+    ]
+    
+    # Determine which dataset to use and set confidence accordingly
+    if len(category_data) >= 2:
+        filtered_data = category_data
+        data_source = f"{subject} - {category}"
+        confidence_multiplier = 1.0
+    elif len(subject_data) >= 2:
+        filtered_data = subject_data
+        data_source = f"{subject} (all categories)"
+        confidence_multiplier = 0.8
+    elif len(all_data) >= 2:
+        filtered_data = all_data
+        data_source = "all subjects (general estimate)"
+        confidence_multiplier = 0.5
+    else:
+        return jsonify({
+            'status': 'error',
+            'message': 'Not enough historical data. Need at least 2 graded assignments total.'
+        }), 400
+    
+    # Extract actual user data
+    past_hours = [log['study_time'] for log in filtered_data]
+    past_grades = [log['grade'] for log in filtered_data]
+    past_weights = [log['weight'] / 100 for log in filtered_data]
+    
+    for log in filtered_data:
+        print(f"  {log['study_time']}h → {log['grade']}%, weight={log['weight']}%")
+    
+    # Calculate learning efficiency (k) from the relationship between hours and grades
+    k = estimate_k(past_hours, past_grades, past_weights, max_grade)
+        
+    # Normalize weight input
+    weight_decimal = weight / 100
+        
+    # Make prediction
+    if hours and not target_grade:
+        hours = float(hours)
+        predicted_grade = predict_grade(hours, weight_decimal, k, max_grade)
+        
+        # Calculate confidence based on data points and similarity
+        base_confidence = calculate_confidence(filtered_data, hours, weight)
+        adjusted_confidence = round(base_confidence * confidence_multiplier)
+        
+        # Find similar assignments for context
+        similar = find_similar_assignment(filtered_data, hours)
+        
+        # Show more precision for grades very close to max
+        if predicted_grade >= max_grade - 1:
+            grade_display = round(predicted_grade, 2)  # Show 2 decimals
+        else:
+            grade_display = round(predicted_grade, 1)  # Show 1 decimal
+        
+        response = {
+            'mode': 'grade_from_hours',
+            'predicted_grade': grade_display,
+            'confidence': adjusted_confidence,
+            'data_points': len(filtered_data),
+            'data_source': data_source,
+            'message': f'Based on {len(filtered_data)} assignments from {data_source}'
+        }
+        
+        if predicted_grade >= max_grade - 0.5:
+            response['note_about_grade'] = f"Grade is very close to maximum ({max_grade}% is theoretically unreachable)"
+        
+        if similar:
+            response['similar_example'] = f"Previously: {similar['study_time']:.1f}h → {similar['grade']}%"
+        
+        if confidence_multiplier < 1.0:
+            response['note'] = f"Using broader data because limited {subject}" + (f" - {category}" if category else "") + " history"
+        
+        return jsonify(response)
+    
+    elif target_grade and not hours:
+        target_grade = float(target_grade)
+        
+        # Convert max grade to slightly less to avoid infinity
+        if target_grade >= max_grade:
+            target_grade = max_grade - 0.55
+            adjusted_target_note = f"(adjusted from {max_grade}% to {target_grade:.2f}% for calculation)"
+        else:
+            adjusted_target_note = None
+        
+        if target_grade > max_grade:
+            return jsonify({
+                'status': 'error',
+                'message': f'Target grade must be {max_grade}% or less'
+            }), 400
+        
+        required = required_hours(target_grade, weight_decimal, k, max_grade)
+        
+        # Check if prediction is reasonable based on your past data
+        max_past_hours = max(past_hours)
+        avg_past_hours = sum(past_hours) / len(past_hours)
+        
+        if required == float('inf'):
+            return jsonify({
+                'status': 'error',
+                'message': f'Target grade of {target_grade}% may be mathematically impossible to reach (requires infinite study time).'
+            }), 400
+        
+        # Only warn if it's WAY beyond past experience (>3x your max)
+        if required > max_past_hours * 3:
+            return jsonify({
+                'status': 'error',
+                'message': f'Target grade of {target_grade}% would require {required:.1f} hours, which is beyond your typical study pattern (your max was {max_past_hours:.1f}h). Consider a more achievable target or verify your inputs.'
+            }), 400
+        
+        # Calculate confidence
+        base_confidence = calculate_confidence(filtered_data, required, weight)
+        adjusted_confidence = round(base_confidence * confidence_multiplier)
+        
+        # Find similar grade for context
+        similar = find_similar_grade(filtered_data, target_grade)
+        
+        response = {
+            'mode': 'hours_from_grade',
+            'required_hours': round(required, 1),
+            'confidence': adjusted_confidence,
+            'data_points': len(filtered_data),
+            'data_source': data_source,
+            'message': f'Based on {len(filtered_data)} assignments from {data_source}'
+        }
+        
+        if adjusted_target_note:
+            response['calculation_note'] = adjusted_target_note
+        
+        if similar:
+            response['similar_example'] = f"Previously: {similar['study_time']:.1f}h → {similar['grade']}%"
+        
+        # Warning if significantly more than usual (but not an error)
+        if required > avg_past_hours * 2:
+            response['warning'] = f"This is significantly more than your average of {avg_past_hours:.1f}h. Make sure you have enough time!"
+        
+        if confidence_multiplier < 1.0:
+            response['note'] = f"Using broader data because limited {subject}" + (f" - {category}" if category else "") + " history"
+        
+        return jsonify(response)
+    
+    else:
+        return jsonify({
+            'status': 'error',
+            'message': 'Provide either hours or target grade, not both.'
+        }), 400
 
 if __name__ == '__main__':
     app.run(debug=True)

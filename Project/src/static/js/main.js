@@ -397,19 +397,23 @@ document.addEventListener('DOMContentLoaded', function() {
                 showConfirmation("Are you sure you want to delete this assignment?", row, 'assignment');
             }
         });
-        assignmentTableBody.addEventListener('input', function(event) {
-            if (event.target.matches('input')) {
-                showValidationAlert([]);
-                event.target.classList.remove('input-error');
-            }
+        assignmentTableBody.addEventListener('change', function(event) {
             if (event.target.name === 'subject') {
-                const subjectValue = event.target.value;
+                const subjectValue = event.target.value.trim();
                 const row = event.target.closest('tr');
                 const categorySelect = row.querySelector('select[name="category"]');
+                if (!categorySelect) return;
+
+                // Clear existing options
                 categorySelect.innerHTML = '<option value="" disabled selected>Select category</option>';
+
+                // Add categories if they exist
                 if (subjectValue && weightCategoriesMap[subjectValue]) {
-                    weightCategoriesMap[subjectValue].forEach(cat => {
-                        categorySelect.add(new Option(cat.name, cat.name));
+                    weightCategoriesMap[subjectValue].forEach(catName => {
+                        const option = document.createElement('option');
+                        option.value = catName;
+                        option.textContent = catName;
+                        categorySelect.appendChild(option);
                     });
                 }
             }
@@ -480,4 +484,112 @@ document.addEventListener('DOMContentLoaded', function() {
             console.error("Failed to parse chart data:", e);
         }
     }
+
+    // Get the subject categories map from the data attribute
+    const subjectCategoriesMap = JSON.parse(document.body.dataset.subjectCategories || '{}');
+
+    // Get the predictor form elements
+    const predictSubject = document.getElementById('predict-subject');
+    const predictCategory = document.getElementById('predict-category');
+
+    // Function to populate category dropdown based on selected subject
+    function updatePredictorCategories() {
+        const selectedSubject = predictSubject.value;
+        const categories = subjectCategoriesMap[selectedSubject] || [];
+        
+        // Clear existing options
+        predictCategory.innerHTML = '';
+        
+        // Add default option
+        const defaultOption = document.createElement('option');
+        defaultOption.value = '';
+        defaultOption.textContent = '-- Select Category --';
+        predictCategory.appendChild(defaultOption);
+        
+        // Add category options
+        categories.forEach(category => {
+            const option = document.createElement('option');
+            option.value = category;
+            option.textContent = category;
+            predictCategory.appendChild(option);
+        });
+    }
+
+    // Initialize categories on page load
+    if (predictSubject && predictCategory) {
+        updatePredictorCategories();
+        
+        // Update categories when subject changes
+        predictSubject.addEventListener('change', updatePredictorCategories);
+    }
+
+    // Handle the predictor form submission
+    const predictorForm = document.getElementById('predictor-form');
+    if (predictorForm) {
+        predictorForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const formData = new FormData(predictorForm);
+            const resultDiv = document.getElementById('prediction-result');
+            
+            try {
+                const response = await fetch('/predict', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    if (data.mode === 'grade_from_hours') {
+                        resultDiv.textContent = `Predicted Grade: ${data.predicted_grade}%`;
+                        resultDiv.style.color = 'green';
+                    } else if (data.mode === 'hours_from_grade') {
+                        resultDiv.textContent = `Required Hours: ${data.required_hours} hours`;
+                        resultDiv.style.color = 'blue';
+                    }
+                } else {
+                    resultDiv.textContent = data.message || 'Error making prediction';
+                    resultDiv.style.color = 'red';
+                }
+            } catch (error) {
+                resultDiv.textContent = 'Error: ' + error.message;
+                resultDiv.style.color = 'red';
+            }
+        });
+    }
+    document.getElementById('predictor-form').addEventListener('submit', async function(e){
+        e.preventDefault();
+        
+        const formData = new FormData(this);
+        const response = await fetch('/predict', {
+            method: 'POST',
+            body: formData
+        });
+        const data = await response.json();
+
+        // Sync grade lock status with predictor
+        const gradeLockBtn = document.getElementById('grade-lock-btn');
+        const predictGradeLock = document.getElementById('predict-grade-lock');
+        const maxGradeContainer = document.getElementById('max-grade-container');
+
+        if (gradeLockBtn) {
+            gradeLockBtn.addEventListener('click', () => {
+                const isLocked = gradeLockBtn.classList.contains('lock-on');
+                predictGradeLock.value = isLocked ? 'true' : 'false';
+                maxGradeContainer.style.display = isLocked ? 'none' : 'block';
+            });
+        }
+        
+        if (data.mode === 'grade_from_hours') {
+            document.getElementById('prediction-result').textContent = 
+                `Predicted Grade: ${data.predicted_grade}`;
+        } else if (data.mode === 'hours_from_grade') {
+            document.getElementById('prediction-result').textContent = 
+                `Required Hours: ${data.required_hours}`;
+        } else {
+            document.getElementById('prediction-result').textContent = data.message;
+        }
+    });
+
 });

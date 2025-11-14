@@ -112,3 +112,33 @@ input, select { width: 95%; padding: 8px; box-sizing: border-box; border-radius:
     background-color: #6c757d;
     color: white;
 }
+
+.predictor-row {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;        /* wrap on small screens */
+    align-items: flex-start; /* align top of each field */
+}
+
+.predictor-field {
+    display: flex;
+    flex-direction: column; /* label on top, input below */
+    gap: 4px;
+}
+
+.predictor-field select,
+.predictor-field input {
+    width: 180px;           
+    padding: 4px 6px;
+    box-sizing: border-box;
+}
+
+#assignment_name {
+    width: 150px;            /* wider for assignment name */
+}
+
+.predictor-field button {
+    height: 30px;
+    padding: 4px 10px;
+    align-self: flex-end;    /* keeps button aligned nicely */
+}
