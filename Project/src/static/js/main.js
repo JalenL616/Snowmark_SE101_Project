@@ -1160,4 +1160,78 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
+    // --- Multi-Select Delete Functionality ---
+    const selectAllCheckbox = document.getElementById('selectAll');
+    const deleteSelectedBtn = document.getElementById('deleteSelectedBtn');
+    const selectedCountSpan = document.getElementById('selectedCount');
+
+    function updateDeleteButton() {
+        const selected = document.querySelectorAll('.select-assignment:checked');
+        if (selected.length > 0) {
+            deleteSelectedBtn.style.display = 'inline-block';
+            selectedCountSpan.textContent = selected.length;
+        } else {
+            deleteSelectedBtn.style.display = 'none';
+        }
+        
+        // Update "select all" checkbox state
+        const allCheckboxes = document.querySelectorAll('.select-assignment');
+        const allChecked = allCheckboxes.length > 0 && 
+                          Array.from(allCheckboxes).every(cb => cb.checked);
+        if (selectAllCheckbox) {
+            selectAllCheckbox.checked = allChecked;
+        }
+    }
+
+    if (selectAllCheckbox) {
+        selectAllCheckbox.addEventListener('change', function() {
+            const checkboxes = document.querySelectorAll('.select-assignment');
+            checkboxes.forEach(cb => cb.checked = this.checked);
+            updateDeleteButton();
+        });
+    }
+
+    if (assignmentTableBody) {
+        assignmentTableBody.addEventListener('change', function(e) {
+            if (e.target.classList.contains('select-assignment')) {
+                updateDeleteButton();
+            }
+        });
+    }
+
+    if (deleteSelectedBtn) {
+        deleteSelectedBtn.addEventListener('click', function() {
+            const selected = document.querySelectorAll('.select-assignment:checked');
+            const ids = Array.from(selected).map(cb => parseInt(cb.dataset.id));
+            
+            if (!confirm(`Delete ${ids.length} assignment(s)? This cannot be undone.`)) return;
+            
+            const currentFilter = subjectFilterDropdown ? subjectFilterDropdown.value : '';
+            
+            fetch(`/delete_multiple?current_filter=${currentFilter}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest'
+                },
+                body: JSON.stringify({ ids: ids })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    renderAssignmentTable(data.updated_assignments, data.summary, currentFilter);
+                    if (selectAllCheckbox) selectAllCheckbox.checked = false;
+                    updateDeleteButton();
+                    showToast(data.message, 'success');
+                } else {
+                    showToast(data.message, 'error');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                showToast('Failed to delete assignments', 'error');
+            });
+        });
+    }
+
 });
