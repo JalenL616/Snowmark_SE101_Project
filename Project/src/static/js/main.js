@@ -1167,20 +1167,58 @@ document.addEventListener('DOMContentLoaded', function() {
 
     function updateDeleteButton() {
         const selected = document.querySelectorAll('.select-assignment:checked');
+        const deselectBtn = document.getElementById('deselectAllBtn');
+        
         if (selected.length > 0) {
             deleteSelectedBtn.style.display = 'inline-block';
             selectedCountSpan.textContent = selected.length;
+            if (deselectBtn) deselectBtn.style.display = 'inline-block';
         } else {
             deleteSelectedBtn.style.display = 'none';
+            if (deselectBtn) deselectBtn.style.display = 'none';
         }
         
         // Update "select all" checkbox state
         const allCheckboxes = document.querySelectorAll('.select-assignment');
         const allChecked = allCheckboxes.length > 0 && 
-                          Array.from(allCheckboxes).every(cb => cb.checked);
+                        Array.from(allCheckboxes).every(cb => cb.checked);
         if (selectAllCheckbox) {
             selectAllCheckbox.checked = allChecked;
         }
+    }
+    
+    const deselectAllBtn = document.getElementById('deselectAllBtn');
+    if (deselectAllBtn) {
+        deselectAllBtn.addEventListener('click', function() {
+            const checkboxes = document.querySelectorAll('.select-assignment');
+            checkboxes.forEach(cb => cb.checked = false);
+            if (selectAllCheckbox) selectAllCheckbox.checked = false;
+            updateDeleteButton();
+        });
+    }
+
+    // Click anywhere on row to toggle checkbox (except buttons and inputs)
+    if (assignmentTableBody) {
+        assignmentTableBody.addEventListener('click', function(e) {
+            // Don't toggle if clicking on buttons, inputs, selects, or the checkbox itself
+            if (e.target.matches('button, input, select, .action-btn')) {
+                return;
+            }
+            
+            // Find the closest row
+            const row = e.target.closest('tr[data-id]');
+            if (!row) return;
+            
+            // Don't toggle for summary row
+            if (row.classList.contains('summary-row')) return;
+            
+            // Find and toggle the checkbox
+            const checkbox = row.querySelector('.select-assignment');
+            if (checkbox) {
+                checkbox.checked = !checkbox.checked;
+                updateDeleteButton();
+            }
+        });
     }
 
     if (selectAllCheckbox) {

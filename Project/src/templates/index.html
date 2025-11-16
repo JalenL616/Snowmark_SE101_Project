@@ -40,8 +40,11 @@
                 </table>
             </div>
             <button id="addRowBtn">Add New Assignment</button>
-            <button id="deleteSelectedBtn" class="action-btn" style="display:none; background-color: #dc3545; margin-left: 10px;">
+            <button id="deleteSelectedBtn" style="display:none; background-color: #dc3545; margin-left: 10px;">
                 Delete Selected (<span id="selectedCount">0</span>)
+            </button>
+            <button id="deselectAllBtn" style="display:none; margin-left: 10px;">
+                Deselect All
             </button>
 
             {% if selected_subject and selected_subject != 'all' %}
