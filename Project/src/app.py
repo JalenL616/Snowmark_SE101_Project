@@ -1,32 +1,26 @@
-'''from flask import Flask, render_template, request, url_for, jsonify, session, redirect, flash
+from flask import Flask, render_template, request, url_for, jsonify, session, redirect, flash
 import json
 import math
+import sys
+import os
 from functools import wraps
+
+# Add current directory to path for imports
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+# Import database functions
+from crud import (get_all_grades, get_all_categories, get_categories_as_dict, add_grade, update_grade,
+                  delete_grade, delete_grades_bulk, recalculate_and_update_weights, add_category,
+                  update_category, delete_category, get_total_weight_for_subject,
+                  get_all_subjects, add_subject as crud_add_subject, delete_subject as crud_delete_subject,
+                  get_subject_by_name)
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'a-very-secret-key'
 
-# In-memory user and study data
+# Database-only architecture - all data comes from database (no in-memory dicts)
+# Simple in-memory user authentication (will be replaced with proper auth later)
 users = { "alice": "1234", "bob": "password", "admin": "admin" }
-study_data = [
-    { "id": 1, "subject": "Mathematics", "category": "Homework", "study_time": 2.5, "assignment_name": "Homework 1", "grade": 85, "weight": 10.0 },
-    { "id": 2, "subject": "History", "category": "Essays", "study_time": 1.5, "assignment_name": "Essay on Rome", "grade": 92, "weight": 15.0 },
-    { "id": 3, "subject": "Science", "category": "Labs", "study_time": 3.0, "assignment_name": "Lab Report", "grade": 78, "weight": 20.0 },
-    { "id": 4, "subject": "Mathematics", "category": "Quizzes", "study_time": 1.0, "assignment_name": "Quiz 1", "grade": 95, "weight": 5.0 },
-    { "id": 5, "subject": "Science", "category": "Projects", "study_time": 2.5, "assignment_name": "Project Proposal", "grade": None, "weight": 15.0 },
-    { "id": 6, "subject": "Mathematics", "category": "Homework", "study_time": 2.0, "assignment_name": "Homework 2", "grade": 88, "weight": 10.0 }
-]
-next_id = 7
-weight_categories = {
-    "Mathematics": [
-        {"id": 1, "name": "Homework", "total_weight": 20, "default_name": "Homework #"},
-        {"id": 2, "name": "Quizzes", "total_weight": 30, "default_name": "Quiz #"},
-    ],
-    "History": [
-        {"id": 3, "name": "Essays", "total_weight": 15, "default_name": ""},
-    ]
-}
-next_category_id = 4
 
 def login_required(f):
     @wraps(f)
@@ -37,29 +31,31 @@ def login_required(f):
         return f(*args, **kwargs)
     return decorated_function
 
-# --- NEW: Function to recalculate weights for a category ---
 def recalculate_weights(subject, category_name):
-    category_def = next((cat for cat in weight_categories.get(subject, []) if cat['name'] == category_name), None)
-    if not category_def:
-        return
-    
-    assignments_in_category = [log for log in study_data if log['subject'] == subject and log['category'] == category_name]
-    num_assessments = len(assignments_in_category)
-    
-    if num_assessments > 0:
-        new_weight = category_def['total_weight'] / num_assessments
-        for log in assignments_in_category:
-            log['weight'] = new_weight
+    """Recalculate weights for a category in the database."""
+    try:
+        recalculate_and_update_weights(subject, category_name)
+    except Exception as e:
+        print(f"Warning: Failed to recalculate weights in database: {e}")
 
 def calculate_summary(subject):
-    if not subject or subject == 'all': return None
+    """Calculate summary statistics for a subject (now using database)."""
+    if not subject or subject == 'all':
+        return None
+
+    # Fetch from database
+    study_data = get_all_grades()
+
     subject_items = [log for log in study_data if log['subject'] == subject]
-    if not subject_items: return None
+    if not subject_items:
+        return None
+
     graded_items = [log for log in subject_items if log.get('grade') is not None]
     total_hours = sum(log['study_time'] for log in subject_items)
     total_weight = sum(log['weight'] for log in graded_items)
     weighted_grade_sum = sum(log['grade'] * log['weight'] for log in graded_items)
     average_grade = weighted_grade_sum / total_weight if total_weight > 0 else 0
+
     return {'total_hours': total_hours, 'average_grade': average_grade, 'total_weight': total_weight}
 
 # --- Estimate k for exponential saturation model ---
@@ -202,34 +198,63 @@ def find_similar_grade(data, target_grade):
 @app.route('/')
 @login_required
 def display_table():
+    """Main page - now reading from database (Phase 2)."""
     filter_subject = request.args.get('subject')
     filter_category = request.args.get('category')
-    subjects_from_data = {log['subject'] for log in study_data}
-    subjects_from_categories = set(weight_categories.keys())
-    unique_subjects = sorted(list(subjects_from_data | subjects_from_categories))
-    data_to_display = study_data
+
+    # Fetch data from database
+    study_data_db = get_all_grades()
+    weight_categories_db = get_categories_as_dict()
+
+    # Get subjects from subjects table
+    all_subjects = get_all_subjects()
+    unique_subjects = sorted([s['name'] for s in all_subjects])
+
+    # Filter data for display
+    data_to_display = study_data_db
     if filter_subject and filter_subject != 'all':
-        data_to_display = [log for log in study_data if log['subject'] == filter_subject]
+        data_to_display = [log for log in study_data_db if log['subject'] == filter_subject]
         if filter_category and filter_category != 'all':
             data_to_display = [log for log in data_to_display if log['category'] == filter_category]
+
+    # Calculate summary
     summary_data = calculate_summary(filter_subject)
-    
-    temp_weight_categories = json.loads(json.dumps(weight_categories))
+
+    # Add num_assessments to categories (count from database)
+    temp_weight_categories = json.loads(json.dumps(weight_categories_db))
     for subject, categories in temp_weight_categories.items():
         for category in categories:
-            category['num_assessments'] = sum(1 for log in study_data if log['subject'] == subject and log['category'] == category['name'])
+            category['num_assessments'] = sum(
+                1 for log in study_data_db
+                if log['subject'] == subject and log['category'] == category['name']
+            )
 
-    subject_categories_map = {s: sorted([cat['name'] for cat in temp_weight_categories.get(s, [])]) for s in unique_subjects}
-    chart_data = {s: sum(log['study_time'] for log in study_data if log['subject'] == s) for s in unique_subjects if s in [d['subject'] for d in study_data]}
-    
+    # Create subject-categories mapping
+    subject_categories_map = {
+        s: sorted([cat['name'] for cat in temp_weight_categories.get(s, [])])
+        for s in unique_subjects
+    }
+
+    # Calculate chart data - only include subjects with actual study time
+    chart_data = {}
+    for s in unique_subjects:
+        total_hours = sum(log['study_time'] for log in study_data_db if log['subject'] == s)
+        if total_hours > 0:  # Only include subjects with study time
+            chart_data[s] = total_hours
+
     return render_template(
-        'index.html', data=data_to_display, subjects=unique_subjects, selected_subject=filter_subject,
-        selected_category=filter_category, summary_data=summary_data, 
-        chart_labels=json.dumps(list(chart_data.keys())), chart_values=json.dumps(list(chart_data.values())),
+        'index.html',
+        data=data_to_display,
+        subjects=unique_subjects,
+        selected_subject=filter_subject,
+        selected_category=filter_category,
+        summary_data=summary_data,
+        chart_labels=json.dumps(list(chart_data.keys())),
+        chart_values=json.dumps(list(chart_data.values())),
         subject_categories_map_py=subject_categories_map,
         subject_categories_map_json=json.dumps(subject_categories_map),
         weight_categories_py=temp_weight_categories,
-        weight_categories_json=json.dumps(weight_categories)
+        weight_categories_json=json.dumps(weight_categories_db)
     )
 
 def process_form_data(form):
@@ -246,47 +271,75 @@ def process_form_data(form):
 @app.route('/add', methods=['POST'])
 @login_required
 def add_log():
-    global next_id
     log_data, error = process_form_data(request.form)
     if error: return jsonify({'status': 'error', 'message': error}), 400
-    log_data['id'] = next_id
-    study_data.append(log_data)
-    next_id += 1
+
+    # Write to database
+    try:
+        db_id = add_grade(
+            subject=log_data['subject'],
+            category=log_data['category'],
+            study_time=log_data['study_time'],
+            assignment_name=log_data['assignment_name'],
+            grade=log_data['grade'],
+            weight=0  # Weight will be recalculated
+        )
+        log_data['id'] = db_id  # Use database-generated ID
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': f'Failed to add assignment: {str(e)}'}), 500
+
     recalculate_weights(log_data['subject'], log_data['category'])
     summary = calculate_summary(request.form.get('current_filter'))
 
+    # Fetch fresh data from database
+    assignments_to_return = get_all_grades()
     current_subject_filter = request.form.get('current_filter')
     if current_subject_filter and current_subject_filter != 'all':
-        assignments_to_return = [log for log in study_data if log['subject'] == current_subject_filter]
-    else:
-        assignments_to_return = study_data
+        assignments_to_return = [log for log in assignments_to_return if log['subject'] == current_subject_filter]
 
     return jsonify({'status': 'success', 'message': 'Assignment added!', 'log': log_data, 'summary': summary, 'updated_assignments': assignments_to_return})
 
 @app.route('/update/<int:log_id>', methods=['POST'])
 @login_required
 def update_log(log_id):
-    update_index = next((i for i, log in enumerate(study_data) if log['id'] == log_id), -1)
-    if update_index == -1: return jsonify({'status': 'error', 'message': 'Assignment not found.'}), 404
-    old_log = study_data[update_index]
+    # PHASE 5 FIX: Check database instead of in-memory dict
+    all_assignments = get_all_grades()
+    old_log = next((log for log in all_assignments if log['id'] == log_id), None)
+
+    if not old_log:
+        return jsonify({'status': 'error', 'message': 'Assignment not found.'}), 404
+
     old_subject = old_log['subject']
     old_category = old_log['category']
-    
+
     updated_data, error = process_form_data(request.form)
     if error: return jsonify({'status': 'error', 'message': error}), 400
     updated_data['id'] = log_id
-    study_data[update_index] = updated_data
-    
+
+    # Update database
+    try:
+        rows_affected = update_grade(
+            grade_id=log_id,
+            subject=updated_data['subject'],
+            category=updated_data['category'],
+            study_time=updated_data['study_time'],
+            assignment_name=updated_data['assignment_name'],
+            grade=updated_data['grade'],
+            weight=0  # Weight will be recalculated
+        )
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': f'Failed to update assignment: {str(e)}'}), 500
+
     if old_subject != updated_data['subject'] or old_category != updated_data['category']:
         recalculate_weights(old_subject, old_category)
     recalculate_weights(updated_data['subject'], updated_data['category'])
-    
+
+    # Fetch fresh data from database instead of using in-memory dict
+    assignments_to_return = get_all_grades()
     current_subject_filter = request.form.get('current_filter')
     summary = calculate_summary(current_subject_filter)
     if current_subject_filter and current_subject_filter != 'all':
-        assignments_to_return = [log for log in study_data if log['subject'] == current_subject_filter]
-    else:
-        assignments_to_return = study_data
+        assignments_to_return = [log for log in assignments_to_return if log['subject'] == current_subject_filter]
 
     return jsonify({'status': 'success', 'message': 'Assignment updated!', 'log': updated_data, 'summary': summary, 'updated_assignments': assignments_to_return})
 
@@ -294,108 +347,108 @@ def update_log(log_id):
 @login_required
 def delete_log(log_id):
     current_filter = request.args.get('current_filter')
-    log_to_delete = next((log for log in study_data if log['id'] == log_id), None)
-    if log_to_delete:
-        subject, category = log_to_delete['subject'], log_to_delete['category']
-        study_data.remove(log_to_delete)
-        recalculate_weights(subject, category)
-        summary = calculate_summary(current_filter)
-        if current_filter and current_filter != 'all':
-            assignments_to_return = [log for log in study_data if log['subject'] == current_filter]
-        else:
-            assignments_to_return = study_data
-        return jsonify({'status': 'success', 'message': 'Assignment deleted!', 'summary': summary, 'updated_assignments': assignments_to_return})
-    return jsonify({'status': 'error', 'message': 'Assignment not found.'}), 404
 
-@app.route('/delete_multiple', methods=['POST'])
-@login_required
-def delete_multiple():
-    current_filter = request.args.get('current_filter')
-    ids_to_delete = request.json.get('ids', [])
-    
-    if not ids_to_delete:
-        return jsonify({'status': 'error', 'message': 'No assignments selected.'}), 400
-    
-    deleted_count = 0
-    subjects_to_recalc = set()
-    
-    for log_id in ids_to_delete:
-        log_to_delete = next((log for log in study_data if log['id'] == log_id), None)
-        if log_to_delete:
-            subjects_to_recalc.add((log_to_delete['subject'], log_to_delete['category']))
-            study_data.remove(log_to_delete)
-            deleted_count += 1
-    
-    for subject, category in subjects_to_recalc:
-        recalculate_weights(subject, category)
-    
+    # PHASE 5 FIX: Check database instead of in-memory dict
+    all_assignments = get_all_grades()
+    log_to_delete = next((log for log in all_assignments if log['id'] == log_id), None)
+
+    if not log_to_delete:
+        return jsonify({'status': 'error', 'message': 'Assignment not found.'}), 404
+
+    subject, category = log_to_delete['subject'], log_to_delete['category']
+
+    # Delete from database
+    try:
+        delete_grade(log_id)
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': f'Failed to delete assignment: {str(e)}'}), 500
+
+    recalculate_weights(subject, category)
     summary = calculate_summary(current_filter)
+
+    # Fetch fresh data from database instead of using in-memory dict
+    assignments_to_return = get_all_grades()
     if current_filter and current_filter != 'all':
-        assignments_to_return = [log for log in study_data if log['subject'] == current_filter]
-    else:
-        assignments_to_return = study_data
-    
-    return jsonify({
-        'status': 'success',
-        'message': f'{deleted_count} assignment(s) deleted!',
-        'summary': summary,
-        'updated_assignments': assignments_to_return
-    })
+        assignments_to_return = [log for log in assignments_to_return if log['subject'] == current_filter]
+
+    return jsonify({'status': 'success', 'message': 'Assignment deleted!', 'summary': summary, 'updated_assignments': assignments_to_return})
 
 @app.route('/category/add', methods=['POST'])
 @login_required
-def add_category():
-    global next_category_id
+def add_category_route():
     subject = request.form.get('subject')
-    if not subject or subject == 'all': return jsonify({'status': 'error', 'message': 'A valid subject must be selected.'}), 400
+    if not subject or subject == 'all':
+        return jsonify({'status': 'error', 'message': 'A valid subject must be selected.'}), 400
+
     try:
+        category_name = request.form.get('name')
         new_weight = int(request.form.get('total_weight'))
-        current_total_weight = sum(cat['total_weight'] for cat in weight_categories.get(subject, []))
+        default_name = request.form.get('default_name', '')
+
+        if not category_name or new_weight is None:
+            return jsonify({'status': 'error', 'message': 'Category Name and Total Weight are required.'}), 400
+
+        # Check total weight from database
+        current_total_weight = get_total_weight_for_subject(subject)
         if current_total_weight + new_weight > 100:
             return jsonify({'status': 'error', 'message': f'Adding {new_weight}% would exceed 100% for this subject.'}), 400
-        
-        new_category = { "id": next_category_id, "name": request.form.get('name'), "total_weight": new_weight, "default_name": request.form.get('default_name', '') }
-        if not new_category['name'] or new_category['total_weight'] is None:
-             return jsonify({'status': 'error', 'message': 'Category Name and Total Weight are required.'}), 400
-        
-        if subject not in weight_categories: weight_categories[subject] = []
-        weight_categories[subject].append(new_category)
-        next_category_id += 1
+
+        # Add to database
+        new_id = add_category(subject, category_name, new_weight, default_name)
+        new_category = {"id": new_id, "name": category_name, "total_weight": new_weight, "default_name": default_name}
+
         return jsonify({'status': 'success', 'message': 'Category added!', 'category': new_category, 'subject': subject})
     except (ValueError, TypeError):
         return jsonify({'status': 'error', 'message': 'Invalid data. Weight must be a number.'}), 400
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': f'Failed to add category: {str(e)}'}), 500
 
 @app.route('/category/update/<int:cat_id>', methods=['POST'])
 @login_required
-def update_category(cat_id):
+def update_category_route(cat_id):
     subject = request.form.get('subject')
-    if not subject or subject not in weight_categories: return jsonify({'status': 'error', 'message': 'Subject not found.'}), 404
-    
-    cat_index = next((i for i, cat in enumerate(weight_categories[subject]) if cat['id'] == cat_id), -1)
-    if cat_index == -1: return jsonify({'status': 'error', 'message': 'Category not found.'}), 404
+    if not subject:
+        return jsonify({'status': 'error', 'message': 'Subject not found.'}), 404
 
     try:
+        category_name = request.form.get('name')
         new_weight = int(request.form.get('total_weight'))
-        current_total_weight = sum(cat['total_weight'] for i, cat in enumerate(weight_categories[subject]) if i != cat_index)
+        default_name = request.form.get('default_name', '')
+
+        if not category_name or new_weight is None:
+            return jsonify({'status': 'error', 'message': 'Category Name and Total Weight are required.'}), 400
+
+        # Check total weight from database (excluding current category)
+        current_total_weight = get_total_weight_for_subject(subject, exclude_category_id=cat_id)
         if current_total_weight + new_weight > 100:
             return jsonify({'status': 'error', 'message': f'Updating to {new_weight}% would exceed 100% for this subject.'}), 400
 
-        updated_category = { "id": cat_id, "name": request.form.get('name'), "total_weight": new_weight, "default_name": request.form.get('default_name', '') }
-        weight_categories[subject][cat_index] = updated_category
+        # Update in database
+        rows_affected = update_category(cat_id, subject, category_name, new_weight, default_name)
+
+        if rows_affected == 0:
+            return jsonify({'status': 'error', 'message': 'Category not found.'}), 404
+
+        updated_category = {"id": cat_id, "name": category_name, "total_weight": new_weight, "default_name": default_name}
         return jsonify({'status': 'success', 'message': 'Category updated!', 'category': updated_category, 'subject': subject})
     except (ValueError, TypeError):
         return jsonify({'status': 'error', 'message': 'Invalid data. Weight must be a number.'}), 400
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': f'Failed to update category: {str(e)}'}), 500
 
 @app.route('/category/delete/<int:cat_id>', methods=['POST'])
 @login_required
-def delete_category(cat_id):
-    subject = request.args.get('current_filter')
-    if not subject or subject not in weight_categories: return jsonify({'status': 'error', 'message': 'Subject not found.'}), 404
-    cat_to_delete = next((cat for cat in weight_categories[subject] if cat['id'] == cat_id), None)
-    if cat_to_delete:
-        weight_categories[subject].remove(cat_to_delete)
+def delete_category_route(cat_id):
+    try:
+        # Delete from database
+        rows_affected = delete_category(cat_id)
+
+        if rows_affected == 0:
+            return jsonify({'status': 'error', 'message': 'Category not found.'}), 404
+
         return jsonify({'status': 'success', 'message': 'Category definition deleted!'})
-    return jsonify({'status': 'error', 'message': 'Category not found.'}), 404
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': f'Failed to delete category: {str(e)}'}), 500
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -447,8 +500,10 @@ def predict():
     max_grade = float(request.form.get('max_grade', 100)) if not grade_lock else 100
     
     # --- 1. Filter Data Sets ---
-    graded_data = [log for log in study_data if log.get('grade') is not None]
-    
+    # Fetch from database
+    all_grades = get_all_grades()
+    graded_data = [log for log in all_grades if log.get('grade') is not None]
+
     all_data = graded_data
     subject_data = [log for log in all_data if log['subject'] == subject]
     category_data = [log for log in subject_data if log['category'] == category]
@@ -663,16 +718,17 @@ def add_subject():
     if not subject_name:
         return jsonify({'status': 'error', 'message': 'Subject name cannot be empty.'}), 400
 
-    # Get all existing subjects
-    all_subjects = set(log['subject'] for log in study_data)
-
-    if subject_name in all_subjects:
+    # Check if subject already exists
+    existing_subject = get_subject_by_name(subject_name)
+    if existing_subject:
         return jsonify({'status': 'error', 'message': 'Subject already exists.'}), 400
 
-    # Initialize empty category list for the new subject
-    weight_categories[subject_name] = []
-
-    return jsonify({'status': 'success', 'subject': subject_name})
+    # Add subject to database
+    try:
+        subject_id = crud_add_subject(subject_name)
+        return jsonify({'status': 'success', 'subject': subject_name, 'id': subject_id})
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': f'Failed to add subject: {str(e)}'}), 500
 
 @app.route('/delete_subject', methods=['POST'])
 @login_required
@@ -682,18 +738,24 @@ def delete_subject():
     if not subject_name:
         return jsonify({'status': 'error', 'message': 'Subject name cannot be empty.'}), 400
 
-    # Delete all assignments for this subject
-    global study_data
-    study_data = [log for log in study_data if log['subject'] != subject_name]
+    # Get subject by name, then delete by ID (cascade deletes assignments/categories)
+    try:
+        subject = get_subject_by_name(subject_name)
+        if not subject:
+            return jsonify({'status': 'error', 'message': f'Subject "{subject_name}" not found.'}), 404
 
-    # Delete weight categories for this subject
-    if subject_name in weight_categories:
-        del weight_categories[subject_name]
-
-    return jsonify({'status': 'success', 'message': f'Subject "{subject_name}" deleted successfully.'})
+        rows_deleted = crud_delete_subject(subject['id'])
+        if rows_deleted > 0:
+            return jsonify({'status': 'success', 'message': f'Subject "{subject_name}" deleted successfully.'})
+        else:
+            return jsonify({'status': 'error', 'message': f'Failed to delete subject "{subject_name}".'}), 500
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': f'Failed to delete subject: {str(e)}'}), 500
 
 if __name__ == '__main__':
-    app.run(debug=True)'''
+    app.run(debug=True)
+    
+"""
 from flask import Flask, render_template, request, url_for, jsonify, session, redirect, flash
 import json
 import sys
@@ -716,7 +778,7 @@ app.config['SECRET_KEY'] = 'a-very-secret-key'
 init_db()
 
 def calculate_summary(subject):
-    """A reusable helper function for calculating summaries for a given subject."""
+    #A reusable helper function for calculating summaries for a given subject.
     study_data = get_all_grades()  # Get data from MySQL
     
     if not subject or subject == 'all':
@@ -854,3 +916,4 @@ def register():
 
 if __name__ == '__main__':
     app.run(debug=True)
+"""

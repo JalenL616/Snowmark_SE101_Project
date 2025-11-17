@@ -255,49 +255,6 @@ document.addEventListener('DOMContentLoaded', function() {
         categoryRow.querySelector('.calculated-weight').textContent = newCalculatedWeight;
     }
 
-    function updateTotalWeightIndicator() {
-        const totalWeightIndicator = document.getElementById('total-weight-indicator');
-        const totalWeightValue = document.getElementById('total-weight-value');
-
-        if (!totalWeightIndicator || !totalWeightValue || !categoryTableBody) return;
-
-        // Calculate total weight from all category rows
-        let totalWeight = 0;
-        const categoryRows = categoryTableBody.querySelectorAll('tr[data-id]');
-
-        categoryRows.forEach(row => {
-            const weightCell = row.querySelectorAll('td')[1];
-            if (weightCell) {
-                const weightText = weightCell.textContent.trim();
-                // Handle both "50%" format and input fields
-                const inputField = weightCell.querySelector('input[name="total_weight"]');
-                if (inputField) {
-                    totalWeight += parseFloat(inputField.value) || 0;
-                } else {
-                    totalWeight += parseFloat(weightText) || 0;
-                }
-            }
-        });
-
-        // Update the display
-        totalWeightValue.textContent = totalWeight.toFixed(1);
-
-        // Color code based on total
-        if (totalWeight === 100) {
-            totalWeightIndicator.style.backgroundColor = '#d4edda';
-            totalWeightIndicator.style.color = '#155724';
-            totalWeightIndicator.style.border = '1px solid #c3e6cb';
-        } else if (totalWeight < 100) {
-            totalWeightIndicator.style.backgroundColor = '#fff3cd';
-            totalWeightIndicator.style.color = '#856404';
-            totalWeightIndicator.style.border = '1px solid #ffeeba';
-        } else {
-            totalWeightIndicator.style.backgroundColor = '#f8d7da';
-            totalWeightIndicator.style.color = '#721c24';
-            totalWeightIndicator.style.border = '1px solid #f5c6cb';
-        }
-    }
-
     async function handleAssignmentSave(row) {
         // --- FIX: Do not revert the preview if validation fails ---
         if (!validateRow(row)) return;
@@ -379,10 +336,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (!itemId) {
                     row.remove();
                     hideConfirmation();
-                    // Update weight indicator if deleting a category row
-                    if (type === 'category') {
-                        updateTotalWeightIndicator();
-                    }
                     return;
                 }
                 const isAssignment = type === 'assignment';
@@ -455,7 +408,6 @@ document.addEventListener('DOMContentLoaded', function() {
             const newRow = document.createElement('tr');
             newRow.innerHTML = `<td><input type="text" name="name" required></td><td><input type="number" name="total_weight" min="0" max="100" required></td><td class="num-assessments">0</td><td class="calculated-weight">N/A</td><td><input type="text" name="default_name" placeholder="e.g., Quiz #"></td><td><button class="action-btn save-btn">Save</button><button class="action-btn delete-btn">Delete</button></td>`;
             categoryTableBody.appendChild(newRow);
-            updateTotalWeightIndicator();
         });
     }
 
@@ -1317,18 +1269,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 console.error('Error:', error);
                 showToast('Failed to delete assignments', 'error');
             });
-        });
-    }
-
-    // Initialize total weight indicator on page load
-    updateTotalWeightIndicator();
-
-    // Update total weight indicator when category weights are edited
-    if (categoryTableBody) {
-        categoryTableBody.addEventListener('input', function(event) {
-            if (event.target.matches('input[name="total_weight"]')) {
-                updateTotalWeightIndicator();
-            }
         });
     }
 

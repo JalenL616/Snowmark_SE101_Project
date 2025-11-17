@@ -72,6 +72,8 @@ input, select { width: 95%; padding: 8px; box-sizing: border-box; border-radius:
 .input-error { border: 2px solid #dc3545 !important; background-color: #f8d7da; }
 #validation-alert { padding: 15px; margin-bottom: 1em; border-radius: 4px; display: none; border: 1px solid #f5c6cb; color: #721c24; background-color: #f8d7da; }
 #validation-alert ul { margin: 0; padding-left: 20px; }
+#confirmation-alert { display: none; padding: 15px; margin-bottom: 1em; border-radius: 4px; border: 1px solid #c3e6cb; color: #155724; background-color: #d4edda; }
+#confirmation-alert.show { display: block; }
 
 /* --- UNIFIED Toast Notification System --- */
 .toast-container { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); z-index: 9999; display: flex; flex-direction: column; align-items: center; gap: 10px; }
