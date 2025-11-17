@@ -54,3 +54,23 @@ def update_grade(grade_id, subject, study_time, assignment_name, grade, weight):
     finally:
         curs.close()
         conn.close()
+
+
+def delete_grade(grade_id):
+    """Delete a grade record by ID."""
+    conn = _connect()
+    try:
+        curs = conn.cursor()
+        query = f"""
+        DELETE FROM {TABLE_NAME}
+        WHERE id = %s
+        """
+        curs.execute(query, (grade_id,))
+        conn.commit()
+        return curs.rowcount  # number of rows deleted (0 or 1)
+    except mysql.connector.Error as e:
+        conn.rollback()
+        raise e
+    finally:
+        curs.close()
+        conn.close()

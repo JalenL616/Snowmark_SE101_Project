@@ -133,6 +133,61 @@ This test plan documents the implemented tests for the Study Time Tracker applic
   - Contains expected test records
   - Each record has required fields: `id`, `Subject`, `StudyTime`, `AssignmentName`, `Grade`, `Weight`
 
+  4.2.4 Grade Deletion Tests
+4.2.4.1 Successful Grade Deletion
+
+Objective: Delete an existing grade record
+
+Test Method: test_delete_grade_success()
+
+Process:
+
+Add a grade using add_grade()
+
+Verify it exists
+
+Call delete_grade(id)
+
+Confirm record no longer exists in DB
+
+Expected Result:
+
+rows_deleted == 1
+
+Row is removed from database
+
+Pass Criteria: Database no longer returns the record
+
+4.2.4.2 Non-existent Grade Deletion
+
+Objective: Ensure deleting an invalid ID does nothing
+
+Test Method: test_delete_grade_nonexistent_id()
+
+Test Data: Use a very large ID (e.g., 999999)
+
+Expected Result:
+
+rows_deleted == 0
+
+Pass Criteria: No rows modified
+
+4.2.4.3 Delete Error Handling
+
+Objective: Verify behavior when DB error occurs
+
+Test Method: test_delete_grade_database_error()
+
+Mock Condition: cursor.execute raises mysql.connector.Error
+
+Expected Result:
+
+Exception is propagated
+
+Transaction is rolled back
+
+Pass Criteria: Test catches the error properly
+
 ## 5. Test Execution
 
 ### 5.1 Running Tests
