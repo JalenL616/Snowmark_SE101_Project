@@ -63,6 +63,17 @@ input, select { width: 95%; padding: 8px; box-sizing: border-box; border-radius:
 #deleteSelectedBtn:hover {
     background-color: #c82333;
 }
+#deselectAllBtn {
+    padding: 10px 15px;
+    background-color: #6c757d;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+}
+#deselectAllBtn:hover {
+    background-color: #5a6268;
+}
 
 /* Logout Button */
 .logout-btn { position: absolute; top: 16px; right: 24px; background: #6c757d; color: white; padding: 8px 14px; border-radius: 8px; text-decoration: none; font-weight: 500; }
