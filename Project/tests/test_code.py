@@ -46,8 +46,6 @@ class Test_connection:
 
         with pytest.raises(Exception):
             connect2DB.connection()
-
-
 class Test_CRUD_Operations:
     """Test cases for CRUD operations (add_grade and update_grade)"""
     
@@ -245,4 +243,72 @@ class Test_CRUD_Operations:
             assert 'AssignmentName' in grade, "Should have AssignmentName field"
             assert 'Grade' in grade, "Should have Grade field (can be None)"
             assert 'Weight' in grade, "Should have Weight field"
+
+    def test_delete_grade_success(self):
+        """Test successful grade deletion"""
+        logging.info("Testing successful grade deletion")
+
+        # First add a grade we can delete
+        subject = "TEST_Delete_Subject"
+        study_time = 2.0
+        assignment_name = "Delete Me"
+        grade = 70
+        weight = 5
+
+        grade_id = crud.add_grade(subject, study_time, assignment_name, grade, weight)
+
+        # Sanity check: make sure it exists before deleting
+        conn = _connect()
+        try:
+            cur = conn.cursor(dictionary=True)
+            cur.execute(f"SELECT * FROM {TABLE_NAME} WHERE id = %s", (grade_id,))
+            result = cur.fetchone()
+            assert result is not None, "Grade should exist before deletion"
+        finally:
+            cur.close()
+            conn.close()
+
+        # Act: delete the grade
+        rows_deleted = crud.delete_grade(grade_id)
+
+        # Assert
+        assert rows_deleted == 1, "Should delete exactly one row"
+
+        # Verify it's actually gone
+        conn = _connect()
+        try:
+            cur = conn.cursor(dictionary=True)
+            cur.execute(f"SELECT * FROM {TABLE_NAME} WHERE id = %s", (grade_id,))
+            result = cur.fetchone()
+            assert result is None, "Grade should no longer exist after deletion"
+        finally:
+            cur.close()
+            conn.close()
+
+    def test_delete_grade_nonexistent_id(self):
+        """Test deleting grade with non-existent ID"""
+        logging.info("Testing delete with non-existent ID")
+
+        # Choose an ID that shouldn't exist (cleanup already wipes TEST_ rows)
+        nonexistent_id = 999999
+
+        rows_deleted = crud.delete_grade(nonexistent_id)
+
+        # Should not delete anything
+        assert rows_deleted == 0, "Should return 0 for non-existent ID"
+
+    def test_delete_grade_database_error(self):
+        """Test delete_grade handling database errors"""
+        logging.info("Testing delete_grade database error handling")
+
+        with patch('src.crud._connect') as mock_connect:
+            mock_conn = mock_connect.return_value
+            mock_cur = mock_conn.cursor.return_value
+            mock_cur.execute.side_effect = mysql.connector.Error("Database error")
+
+            with pytest.raises(mysql.connector.Error):
+                crud.delete_grade(1)
+
+
+
 
