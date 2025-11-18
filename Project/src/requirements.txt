@@ -20,3 +20,9 @@ python-dotenv>=1.0.0
 
 # Optional: For better logging and debugging
 colorama>=0.4.6
+
+#WSGI Server for Production
+gunicorn>=21.2.0
+
+# Render-specific dependencies
+psycopg2-binary>=2.9.0
