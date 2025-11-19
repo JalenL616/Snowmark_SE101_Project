@@ -366,6 +366,8 @@ def delete_log(log_id):
     recalculate_weights(subject, category)
     summary = calculate_summary(current_filter)
 
+    # Fetch fresh data from database
+    assignments_to_return = get_all_grades()
     if current_filter and current_filter != 'all':
         assignments_to_return = [log for log in assignments_to_return if log['subject'] == current_filter]
 
