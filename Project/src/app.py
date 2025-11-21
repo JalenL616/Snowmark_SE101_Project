@@ -39,27 +39,37 @@ def recalculate_weights(subject, category_name):
     except Exception as e:
         print(f"Warning: Failed to recalculate weights in database: {e}")
 
-def calculate_summary(subject):
+def calculate_summary(subject, include_predictions=False):
     """Calculate summary statistics for a subject (now using database)."""
     if not subject or subject == 'all':
         return None
-
-    # Fetch from database
+    
     study_data = get_all_grades()
-
+    # Filter by subject
     subject_items = [log for log in study_data if log['subject'] == subject]
+    
+    # Filter predictions if not included
+    if not include_predictions:
+        subject_items = [log for log in subject_items if not log.get('is_prediction', False)]
+        
     if not subject_items:
         return None
-
+        
     graded_items = [log for log in subject_items if log.get('grade') is not None]
+    
     total_hours = sum(log['study_time'] for log in subject_items)
     total_weight = sum(log['weight'] for log in graded_items)
+    
     weighted_grade_sum = sum(log['grade'] * log['weight'] for log in graded_items)
     average_grade = weighted_grade_sum / total_weight if total_weight > 0 else 0
+    
+    return {
+        'total_hours': total_hours,
+        'average_grade': average_grade,
+        'total_weight': total_weight
+    }
 
-    return {'total_hours': total_hours, 'average_grade': average_grade, 'total_weight': total_weight}
 
-# --- Estimate k for exponential saturation model ---
 
 def estimate_k(hours_list, grades_list, weights_list, max_grade=100):
     """
@@ -679,6 +689,13 @@ def predict():
     grade_lock = request.form.get('grade_lock', 'true').lower() == 'true'
     max_grade = float(request.form.get('max_grade', 100)) if not grade_lock else 100
     
+    # Validate negative inputs
+    if (hours and float(hours) < 0) or (target_grade and float(target_grade) < 0):
+        return jsonify({
+            'status': 'error',
+            'message': 'Values cannot be negative.'
+        }), 400
+
     # --- 1. Filter Data Sets ---
     # Fetch from database
     all_grades = get_all_grades()
@@ -952,6 +969,131 @@ def rename_subject_route():
         return jsonify({'status': 'error', 'message': str(e)}), 400
     except Exception as e:
         return jsonify({'status': 'error', 'message': f'Database error: {str(e)}'}), 500
+
+@app.route('/predict_subject', methods=['POST'])
+@login_required
+def predict_subject():
+    """
+    Predict overall grade or required study time for an entire subject.
+    """
+    subject = request.form.get('subject')
+    target_grade_str = request.form.get('target_grade')
+    study_time_str = request.form.get('study_time')
+    
+    if not subject:
+        return jsonify({'status': 'error', 'message': 'Subject is required.'}), 400
+
+    use_predictions = request.form.get('use_predictions') == 'true'
+
+    # Use existing summary calculation for efficiency and consistency
+    summary = calculate_summary(subject, include_predictions=use_predictions)
+    if not summary:
+         return jsonify({'status': 'error', 'message': 'Subject data not found.'}), 404
+
+    current_grade = summary['average_grade']
+    current_weight = summary['total_weight']
+    remaining_weight = 100 - current_weight
+    
+    # If course is complete (or near complete), we can't really predict much
+    if remaining_weight <= 0.01:
+         return jsonify({
+            'status': 'success',
+            'message': 'Course is 100% complete.',
+            'current_grade': round(current_grade, 2),
+            'remaining_weight': 0,
+            'prediction': None
+        })
+
+    # Fetch data for k estimation
+    all_grades = get_all_grades()
+    subject_data = [log for log in all_grades if log['subject'] == subject]
+    
+    # IMPORTANT: For k estimation, we ONLY want actual past performance, NOT predictions
+    # So we explicitly filter out predictions even if use_predictions is True for the summary
+    graded_items = [log for log in subject_data if log.get('grade') is not None and not log.get('is_prediction')]
+
+    # Estimate k for the subject
+    def get_k(data):
+        if len(data) < 2: return 0.3 # Default
+        hours = [log['study_time'] for log in data]
+        grades = [log['grade'] for log in data]
+        weights = [log['weight'] / 100 for log in data]
+        return estimate_k(hours, grades, weights)
+
+    if len(graded_items) >= 2:
+        k = get_k(graded_items)
+    else:
+        # Fallback to all data (excluding predictions)
+        all_graded = [log for log in all_grades if log.get('grade') is not None and not log.get('is_prediction')]
+        k = get_k(all_graded)
+
+    response_data = {
+        'status': 'success',
+        'current_grade': round(current_grade, 2),
+        'remaining_weight': round(remaining_weight, 2),
+        'k_estimated': k
+    }
+
+    # CASE 1: Target Grade -> Required Time
+    if target_grade_str and target_grade_str.strip():
+        try:
+            target_overall = float(target_grade_str)
+            if target_overall < 0:
+                return jsonify({'status': 'error', 'message': 'Target grade cannot be negative.'}), 400
+            
+            # Calculate what average is needed on the remaining weight
+            # target_overall = (current_grade * current_weight + future_avg * remaining_weight) / 100
+            # future_avg * remaining_weight = target_overall * 100 - current_grade * current_weight
+            
+            weighted_grade_sum = current_grade * current_weight
+            required_future_avg = (target_overall * 100 - weighted_grade_sum) / remaining_weight
+            
+            response_data['average_grade_needed'] = round(required_future_avg, 2)
+            
+            if required_future_avg < 0:
+                 response_data['message'] = "You're already above this target!"
+                 response_data['predicted_additional_time'] = 0
+            elif required_future_avg > 100: 
+                 response_data['message'] = "Target unreachable (requires > 100% on remaining work)."
+                 response_data['predicted_additional_time'] = None
+            else:
+                # Calculate time needed for this average on the remaining weight
+                hours_needed = required_hours(required_future_avg, remaining_weight/100, k)
+                
+                if hours_needed == float('inf'):
+                    response_data['message'] = "Target unreachable with current learning efficiency."
+                    response_data['predicted_additional_time'] = None
+                else:
+                    response_data['predicted_additional_time'] = round(hours_needed, 1)
+                    
+        except ValueError:
+            return jsonify({'status': 'error', 'message': 'Invalid target grade.'}), 400
+
+    # CASE 2: Study Time -> Predicted Overall Grade
+    elif study_time_str and study_time_str.strip():
+        try:
+            future_hours = float(study_time_str)
+            if future_hours < 0:
+                return jsonify({'status': 'error', 'message': 'Study time cannot be negative.'}), 400
+            
+            # Predict grade for the remaining weight based on time
+            predicted_future_avg = predict_grade(future_hours, remaining_weight/100, k)
+            
+            # Calculate overall grade
+            weighted_grade_sum = current_grade * current_weight
+            predicted_overall = (weighted_grade_sum + predicted_future_avg * remaining_weight) / 100
+            
+            response_data['predicted_overall_grade'] = round(predicted_overall, 2)
+            response_data['average_grade_needed'] = round(predicted_future_avg, 2)
+            
+        except ValueError:
+             return jsonify({'status': 'error', 'message': 'Invalid study time.'}), 400
+             
+    else:
+        # Just return status info if no inputs
+        pass
+
+    return jsonify(response_data)
 
 if __name__ == '__main__':
     import os
