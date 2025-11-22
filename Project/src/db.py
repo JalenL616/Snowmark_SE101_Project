@@ -55,6 +55,18 @@ CREATE TABLE IF NOT EXISTS {SUBJECTS_TABLE} (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 """
 
+USERS_TABLE = f"{DB_USER}_users"
+
+# Users table DDL
+USERS_DDL = f"""
+CREATE TABLE IF NOT EXISTS {USERS_TABLE} (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    username varchar(255) NOT NULL UNIQUE,
+    password_hash varchar(255) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+"""
+
 def _connect(db=None):
     return mysql.connector.connect(
         host=DB_HOST, user=DB_USER, password=DB_PASS, database=db or DB_NAME
@@ -78,6 +90,7 @@ def init_db():
         cur.execute(GRADES_DDL)
         cur.execute(CATEGORIES_DDL)
         cur.execute(SUBJECTS_DDL)
+        cur.execute(USERS_DDL)
         conn.commit()
     finally:
         cur.close()

@@ -14,14 +14,13 @@ from crud import (get_all_grades, get_all_categories, get_categories_as_dict, ad
                   update_category, delete_category, get_total_weight_for_subject,
                   get_all_subjects, add_subject as crud_add_subject, delete_subject as crud_delete_subject,
                   rename_subject as crud_rename_subject,
-                  get_subject_by_name)
+                  get_subject_by_name,
+                  create_user, verify_user, user_exists)
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'a-very-secret-key'
 
 # Database-only architecture - all data comes from database (no in-memory dicts)
-# Simple in-memory user authentication (will be replaced with proper auth later)
-users = { "alice": "1234", "bob": "password", "admin": "admin" }
 
 def login_required(f):
     @wraps(f)
@@ -662,7 +661,8 @@ def login():
     if request.method == 'POST':
         username = request.form.get('username')
         password = request.form.get('password')
-        if username in users and users[username] == password:
+        
+        if verify_user(username, password):
             session['user'] = username
             return redirect(url_for('display_table'))
         else:
@@ -682,16 +682,21 @@ def register():
         username = request.form.get('username', '').strip()
         password = request.form.get('password', '').strip()
         confirm = request.form.get('confirm_password', '').strip()
+        
         if not username or not password:
             flash("Username and password are required.", "error")
-        elif username in users:
+        elif user_exists(username):
             flash("Username already exists.", "error")
         elif password != confirm:
             flash("Passwords do not match.", "error")
         else:
-            users[username] = password
-            flash("Account created successfully! Please log in.", "success")
-            return redirect(url_for('login'))
+            try:
+                create_user(username, password)
+                flash("Account created successfully! Please log in.", "success")
+                return redirect(url_for('login'))
+            except Exception as e:
+                flash(f"Registration failed: {str(e)}", "error")
+                
     return render_template('register.html')
 
 @app.route('/predict', methods=['POST'])

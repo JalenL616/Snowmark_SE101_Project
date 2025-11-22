@@ -2,8 +2,60 @@ import sys
 import os
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from db import init_db, _connect, TABLE_NAME, CATEGORIES_TABLE, SUBJECTS_TABLE
+from db import init_db, _connect, TABLE_NAME, CATEGORIES_TABLE, SUBJECTS_TABLE, USERS_TABLE
 import mysql.connector
+from werkzeug.security import generate_password_hash, check_password_hash
+
+# ============================================================================
+# PHASE 8: User Authentication
+# ============================================================================
+
+def create_user(username, password):
+    """Create a new user with hashed password."""
+    conn = _connect()
+    try:
+        curs = conn.cursor()
+        password_hash = generate_password_hash(password, method='pbkdf2:sha256')
+        
+        query = f"INSERT INTO {USERS_TABLE} (username, password_hash) VALUES (%s, %s)"
+        curs.execute(query, (username, password_hash))
+        conn.commit()
+        return curs.lastrowid
+    except mysql.connector.Error as e:
+        conn.rollback()
+        raise e
+    finally:
+        curs.close()
+        conn.close()
+
+def verify_user(username, password):
+    """Verify username and password against database."""
+    conn = _connect()
+    try:
+        curs = conn.cursor(dictionary=True)
+        query = f"SELECT password_hash FROM {USERS_TABLE} WHERE username = %s"
+        curs.execute(query, (username,))
+        result = curs.fetchone()
+        
+        if result and check_password_hash(result['password_hash'], password):
+            return True
+        return False
+    finally:
+        curs.close()
+        conn.close()
+
+def user_exists(username):
+    """Check if a username already exists."""
+    conn = _connect()
+    try:
+        curs = conn.cursor()
+        query = f"SELECT id FROM {USERS_TABLE} WHERE username = %s"
+        curs.execute(query, (username,))
+        return curs.fetchone() is not None
+    finally:
+        curs.close()
+        conn.close()
+
 
 def get_all_grades(username):
     """Get all grade records for a specific user."""
