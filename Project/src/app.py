@@ -295,7 +295,8 @@ def render_subject_view(filter_subject):
         subject_categories_map_json=json.dumps(subject_categories_map),
         weight_categories_py=temp_weight_categories,
         weight_categories_json=json.dumps(weight_categories_db),
-        page_title=page_title
+        page_title=page_title,
+        username=username
     )
 
 @app.route('/about')
