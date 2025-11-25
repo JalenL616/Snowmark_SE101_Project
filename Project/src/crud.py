@@ -56,6 +56,24 @@ def user_exists(username):
         curs.close()
         conn.close()
 
+def set_subject_retirement_status(username: str, subject_name: str, is_retired: bool):
+    """
+    Placeholder for database function to set the 'is_retired' status of a subject
+    in the SUBJECTS_TABLE. This assumes SUBJECTS_TABLE has an 'is_retired' column.
+    """
+    conn = _connect()
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            f"UPDATE {SUBJECTS_TABLE} SET is_retired = %s WHERE username = %s AND name = %s",
+            (is_retired, username, subject_name)
+        )
+        conn.commit()
+    finally:
+        try: cur.close()
+        except: pass
+        try: conn.close()
+        except: pass
 
 def get_all_grades(username):
     """Get all grade records for a specific user."""

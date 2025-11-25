@@ -1425,6 +1425,53 @@ def predict_subject():
 
     return jsonify(response_data)
 
+@app.route('/retired_subjects')
+@login_required
+def retired_subjects():
+    """Page to display all retired subjects and subjects that are 100% complete."""
+    username = session['user']
+    all_subjects = get_all_subjects(username)
+    final_list = []
+    
+    for subject_entry in all_subjects:
+        subject_name = subject_entry['name']
+        
+        # Calculate summary and total available weight
+        # Only include non-prediction grades in summary
+        summary = calculate_summary(username, subject_name, include_predictions=False)
+        total_weight_available = get_total_weight_for_subject(username, subject_name)
+        
+        completeness_pct = 0
+        if summary and total_weight_available > 0:
+            # Completeness is the percentage of total available weight that has been graded
+            completeness_pct = (summary['total_weight'] / total_weight_available) * 100
+        
+        is_retired = subject_entry.get('is_retired', False)
+        
+        # Include subjects that are explicitly retired OR are 100% complete candidates
+        if is_retired or completeness_pct >= 99.9: # Use 99.9 for float comparison safety
+            final_list.append({
+                'name': subject_name,
+                'is_retired': is_retired,
+                'average_grade': summary['average_grade'] if summary else None,
+                'total_weight_available': total_weight_available,
+                'completeness': completeness_pct
+            })
+            
+    final_list.sort(key=lambda x: x['name'])
+    
+    # Filter active subjects for the sidebar (must be injected for the template)
+    active_subjects = [s for s in all_subjects if not s.get('is_retired', False)]
+    unique_active_subjects = sorted([s['name'] for s in active_subjects])
+    
+    return render_template(
+        'retired_subjects.html',
+        page_title="Retired Subjects",
+        retired_subjects=final_list,
+        subjects=unique_active_subjects, # For sidebar/layout consistency
+        username=username
+    )
+
 if __name__ == '__main__':
     import os
     port = int(os.environ.get('PORT', 5000))
