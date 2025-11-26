@@ -33,3 +33,19 @@
 
 ## 📈 Velocity
 - Completed all assigned sprint tasks and implemented additional backlog features.
+
+
+# Sprint 3 Retrospective
+
+## ✅ What Went Well
+- Successfully deployed the website on **Vercel**
+- Statistics features were fully implemented as planned
+- Individual user tables were created and integrated
+- Grade calculation functionality was completed and works as intended
+
+## ⚙️ What Could Be Improved
+- Several smaller bug fixes were not addressed during the sprint
+- Chart components still require refinement and further development
+
+## 📈 Velocity
+- Overall progress was slower this sprint; core features were completed, but several planned improvements were left unfinished.
