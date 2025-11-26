@@ -968,6 +968,7 @@ def login():
         
         if verify_user(username, password):
             session['user'] = username
+            flash(f"Hello, {username}!", "greeting")
             return redirect(url_for('display_table'))
         else:
             flash('Invalid username or password.', 'error')

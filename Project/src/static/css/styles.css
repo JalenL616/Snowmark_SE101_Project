@@ -670,18 +670,18 @@ td:last-child {
     position: fixed;
     z-index: 3000;
     left: 50%;
-    bottom: 30px;
+    top: 30px;
     transform: translateX(-50%) scale(0.9);
     font-size: 17px;
     opacity: 0;
-    transition: opacity 0.3s, bottom 0.3s, transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    transition: opacity 0.3s, top 0.3s, transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
     box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2);
 }
 
 .toast.show {
     visibility: visible;
     opacity: 1;
-    bottom: 50px;
+    top: 50px;
     transform: translateX(-50%) scale(1);
 }
 
@@ -695,6 +695,13 @@ td:last-child {
 
 .toast.info {
     background: var(--primary-color);
+}
+
+.toast.greeting {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    font-weight: 600;
+    font-size: 1.1em;
+    box-shadow: 0 10px 25px rgba(118, 75, 162, 0.4);
 }
 
 /* --- Stats Page --- */
