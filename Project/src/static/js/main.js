@@ -63,6 +63,14 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
 
+    // --- Auto-dismiss server-rendered toasts ---
+    document.querySelectorAll('.toast.show').forEach(toast => {
+        setTimeout(() => {
+            toast.classList.remove('show');
+            toast.addEventListener('transitionend', () => toast.remove());
+        }, 4000);
+    });
+
     // --- Element Selectors ---
     const assignmentTableBody = document.getElementById('study-table-body');
     const categoryTableBody = document.getElementById('category-table-body');
