@@ -1,4 +1,5 @@
-document.addEventListener('DOMContentLoaded', function () {
+document.addEventListener('DOMContentLoaded',
+    function () {
     // --- Sidebar Logic ---
     const menuBtn = document.getElementById('menu-btn');
     const closeSidebarBtn = document.getElementById('close-sidebar-btn');
@@ -2546,4 +2547,101 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
 
+
+
+  const tbody = document.getElementById('study-table-body');
+  if (!tbody) return;
+
+  let draggingEl = null;
+
+  function rowFromEl(el) {
+    return el && el.closest('tr.assignment-row');
+  }
+
+  // Start drag only from the handle
+  tbody.addEventListener('pointerdown', (e) => {
+    const handle = e.target.closest('.drag-handle');
+    if (!handle) return;
+    const row = rowFromEl(handle);
+    if (!row) return;
+    row.setAttribute('draggable', 'true');
+  });
+
+  // If user just clicks (no drag), remove draggable so it doesn't “stick”
+  tbody.addEventListener('pointerup', (e) => {
+    const row = rowFromEl(e.target);
+    if (row) row.removeAttribute('draggable');
+  });
+
+  tbody.addEventListener('dragstart', (e) => {
+    const row = rowFromEl(e.target);
+    if (!row) return;
+    draggingEl = row;
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', row.dataset.id);
+    row.classList.add('dragging');
+  });
+
+  tbody.addEventListener('dragend', (e) => {
+    const row = rowFromEl(e.target);
+    if (row) {
+      row.classList.remove('dragging');
+      row.removeAttribute('draggable');
+    }
+    draggingEl = null;
+  });
+
+  tbody.addEventListener('dragover', (e) => {
+    e.preventDefault(); // REQUIRED or drop won't fire
+    const after = getRowAfterPointer(tbody, e.clientY);
+    const current = draggingEl;
+    if (!current) return;
+    if (!after) tbody.appendChild(current);
+    else if (after !== current) tbody.insertBefore(current, after);
+  });
+
+  tbody.addEventListener('drop', async (e) => {
+    e.preventDefault();
+    const ids = Array.from(tbody.querySelectorAll('tr.assignment-row'))
+      .map(tr => parseInt(tr.dataset.id, 10))
+      .filter(Number.isInteger);
+
+    console.log('[DnD] Saving order:', ids);
+
+    try {
+      const r = await fetch('/api/assignments/reorder', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ order: ids })
+      });
+      const json = await r.json().catch(() => ({}));
+      if (!r.ok || json.status !== 'ok') {
+        console.error('Reorder failed:', json);
+        showToast(json.message || 'Reorder failed', 'error');
+      } else {
+        showToast('Order saved', 'success');
+      }
+    } catch (err) {
+      console.error('Network error saving order', err);
+      showToast('Network error saving order', 'error');
+    }
+  });
+
+  function getRowAfterPointer(container, y) {
+    const rows = [...container.querySelectorAll('tr.assignment-row:not(.dragging)')];
+    let closest = null;
+    let closestOffset = Number.NEGATIVE_INFINITY;
+    for (const row of rows) {
+      const box = row.getBoundingClientRect();
+      const offset = y - box.top - box.height / 2;
+      if (offset < 0 && offset > closestOffset) {
+        closestOffset = offset;
+        closest = row;
+      }
+    }
+    return closest;
+  }
+
 });
+
+
