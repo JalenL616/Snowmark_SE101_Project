@@ -932,7 +932,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 // Create category dropdown for predictions
                 const categoryDropdownHtml = createCategoryDropdown(log.subject, log.category, log.id);
 
-                row.innerHTML = `<td><input type="checkbox" class="select-assignment" data-id="${log.id}"></td><td>${log.subject}</td><td class="prediction-category-cell" data-id="${log.id}"></td><td><input type="number" class="prediction-input hours-input" data-id="${log.id}" value="${log.study_time || 0}" step="0.1" style="width: 80px;"> hours</td><td>${log.assignment_name}</td><td><input type="number" class="prediction-input grade-input" data-id="${log.id}" value="${log.grade || ''}" step="1" style="width: 80px;">%</td><td>${parseFloat(log.weight).toFixed(2)}%</td><td><button class="action-btn predict-btn">Predict</button><button class="action-btn add-prediction-btn">Add</button><button class="action-btn delete-btn">Delete</button></td>`;
+                row.innerHTML = `<td><input type="checkbox" class="select-assignment" data-id="${log.id}"></td><td>${log.subject}</td><td class="prediction-category-cell" data-id="${log.id}"></td><td><input type="number" name="study_time" class="prediction-input hours-input" data-id="${log.id}" value="${log.study_time || 0}" step="0.1" style="width: 80px;"> hours</td><td>${log.assignment_name}</td><td><input type="number" name="grade" class="prediction-input grade-input" data-id="${log.id}" value="${log.grade || ''}" step="1" style="width: 80px;">%</td><td>${parseFloat(log.weight).toFixed(2)}%</td><td><button class="action-btn predict-btn">Predict</button><button class="action-btn add-prediction-btn">Add</button><button class="action-btn delete-btn">Delete</button></td>`;
 
                 // Insert the category dropdown
                 const categoryCell = row.querySelector('.prediction-category-cell');
@@ -1086,8 +1086,8 @@ document.addEventListener('DOMContentLoaded', function () {
 
         // Determine is_prediction status
         // If forceAssignment is true, we are converting to assignment, so is_prediction = false
-        // Otherwise, use the row's dataset
-        let isPrediction = row.dataset.isPrediction === 'true';
+        // Otherwise, check both dataset (for client-created rows) and class (for server-rendered rows)
+        let isPrediction = row.dataset.isPrediction === 'true' || row.classList.contains('prediction-row');
         if (forceAssignment) {
             isPrediction = false;
         }
@@ -1570,19 +1570,21 @@ document.addEventListener('DOMContentLoaded', function () {
                 const grade = gradeInput ? gradeInput.value : '';
                 const weight = weightCell ? parseFloat(weightCell.textContent) : 0;
 
-                // Validate: need either hours OR grade (target), but not both populated for prediction?
-                // Actually, usually we have one and want to predict the other.
+                // Treat 0 as empty for prediction purposes (allows using 0 to indicate field to predict)
+                const hoursValue = hours && parseFloat(hours) !== 0 ? hours : '';
+                const gradeValue = grade && parseFloat(grade) !== 0 ? grade : '';
 
-                if (hours && grade) {
+                // Validate: need either hours OR grade (target), but not both populated for prediction
+                if (hoursValue && gradeValue) {
                     showToast('Please clear one field to predict it based on the other.', 'error');
                     return;
                 }
-                if (!hours && !grade) {
+                if (!hoursValue && !gradeValue) {
                     showToast('Please enter either Hours or Target Grade.', 'error');
                     return;
                 }
 
-                if ((hours && parseFloat(hours) < 0) || (grade && parseFloat(grade) < 0)) {
+                if ((hoursValue && parseFloat(hoursValue) < 0) || (gradeValue && parseFloat(gradeValue) < 0)) {
                     showToast('Values cannot be negative.', 'error');
                     return;
                 }
@@ -1610,8 +1612,8 @@ document.addEventListener('DOMContentLoaded', function () {
                 formData.append('weight', weight);
                 formData.append('grade_lock', isGradeLockOn ? 'true' : 'false');
 
-                if (hours) formData.append('hours', hours);
-                if (grade) formData.append('target_grade', grade);
+                if (hoursValue) formData.append('hours', hoursValue);
+                if (gradeValue) formData.append('target_grade', gradeValue);
 
                 try {
                     const response = await fetch('/predict', {

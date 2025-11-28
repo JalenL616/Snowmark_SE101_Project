@@ -163,7 +163,8 @@
                             </thead>
                             <tbody id="study-table-body">
                                 {% for row in data %}<tr data-id="{{ row.id }}"
-                                    class="{% if row.is_prediction %}prediction-row{% endif %}">
+                                    class="{% if row.is_prediction %}prediction-row{% endif %}"
+                                    {% if row.is_prediction %}data-is-prediction="true"{% endif %}>
                                     <td><input type="checkbox" class="select-assignment" data-id="{{ row.id }}"></td>
                                     <td>{{ row.subject }}</td>
                                     <td><span class="category-tag"><svg xmlns="http://www.w3.org/2000/svg"
@@ -175,11 +176,11 @@
                                                 <line x1="7" y1="7" x2="7.01" y2="7"></line>
                                             </svg> {{ row.category }}</span></td>
                                     {% if row.is_prediction %}
-                                    <td><input type="number" class="prediction-input hours-input" data-id="{{ row.id }}"
+                                    <td><input type="number" name="study_time" class="prediction-input hours-input" data-id="{{ row.id }}"
                                             value="{{ row.study_time }}" step="0.1" min="0" style="width: 80px;"> hours
                                     </td>
                                     <td>{{ row.assignment_name }}</td>
-                                    <td><input type="number" class="prediction-input grade-input" data-id="{{ row.id }}"
+                                    <td><input type="number" name="grade" class="prediction-input grade-input" data-id="{{ row.id }}"
                                             value="{{ row.grade }}" step="1" min="0" style="width: 80px;">%</td>
                                     {% else %}
                                     <td>{{ "%.1f"|format(row.study_time) }} hours</td>
