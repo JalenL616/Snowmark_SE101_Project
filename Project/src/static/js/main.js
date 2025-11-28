@@ -107,6 +107,190 @@ document.addEventListener('DOMContentLoaded',
         let isGradeLockOn = localStorage.getItem('isGradeLockOn') !== null ? localStorage.getItem('isGradeLockOn') === 'true' : true;
         let showPredictions = localStorage.getItem('showPredictions') === 'true';
 
+    if (triggerSubjectPredictBtn) {
+        triggerSubjectPredictBtn.addEventListener('click', async function () {
+            const subjectFilterDropdown = document.getElementById('subject-filter');
+            const subjectFilterVisible = document.getElementById('subject-filter-visible');
+
+            let subject = subjectFilterDropdown ? subjectFilterDropdown.value : '';
+            if ((!subject || subject === 'all') && subjectFilterVisible) {
+                subject = subjectFilterVisible.value;
+            }
+
+            if (!subject || subject === 'all') {
+                showToast('Please select a subject first.', 'error');
+                return;
+            }
+
+            const overallGrade = predictOverallGradeInput.value;
+            const studyTime = predictStudyTimeInput.value;
+
+            if (!overallGrade && !studyTime) {
+                showToast('Please enter a target grade or study time.', 'error');
+                return;
+            }
+
+            if ((overallGrade && parseFloat(overallGrade) < 0) || (studyTime && parseFloat(studyTime) < 0)) {
+                showToast('Values cannot be negative.', 'error');
+                return;
+            }
+
+            // Clear the OTHER input to ensure mutually exclusive prediction
+            // If user entered overall grade, we predict study time (so clear study time input if it had a value? No, usually we want to fill it)
+            // Actually, the user request says: "make it so when you predict a subject it shows the predicted grade or percent in the other input field and not separately"
+
+            const formData = new FormData();
+            formData.append('subject', subject);
+            if (overallGrade) formData.append('target_grade', overallGrade);
+            if (studyTime) formData.append('study_time', studyTime);
+
+            // Pass the current state of "Show Predictions"
+            // If true, the backend should include predicted assignments in the current grade/weight calc
+            formData.append('use_predictions', showPredictions);
+
+            try {
+                const response = await fetch('/predict_subject', {
+                    method: 'POST',
+                    body: formData
+                });
+                const result = await response.json();
+
+                if (result.status === 'success') {
+                    // Clear previous error messages
+                    // Clear previous results
+                    // (Toast messages disappear automatically, so no need to clear a static element)
+
+                    if (result.remaining_weight !== undefined && predictorRemainingWeight) {
+                        predictorRemainingWeight.textContent = result.remaining_weight + '%';
+                    }
+
+                    // Populate the complementary field
+                    if (result.predicted_additional_time !== undefined && result.predicted_additional_time !== null) {
+                        predictStudyTimeInput.value = result.predicted_additional_time;
+                        // Optional: Highlight it?
+                    } else if (result.predicted_overall_grade !== undefined && result.predicted_overall_grade !== null) {
+                        predictOverallGradeInput.value = result.predicted_overall_grade;
+                    }
+
+                    // Also show avg needed if available
+                    if (predictorAvgNeeded) {
+                        if (result.average_grade_needed !== undefined) {
+                            predictorAvgNeeded.textContent = result.average_grade_needed + '%';
+                        }
+                    }
+
+                    if (result.message) {
+                        // Show non-critical messages (like "Target unreachable")
+                        const type = result.message.includes('unreachable') ? 'error' : 'success';
+                        showToast(result.message, type);
+                    }
+
+                } else {
+                    showToast(result.message, 'error');
+                }
+            } catch (error) {
+                console.error('Prediction failed:', error);
+                showToast('Network error occurred.', 'error');
+            }
+        });
+    }
+
+    // Enter key support for Subject Predictor
+    if (predictOverallGradeInput) {
+        predictOverallGradeInput.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                // Clear the other input if it has a value to avoid confusion? 
+                // Or just let the button handler deal with it (it prioritizes target_grade if both present usually, or we should ensure only one is sent)
+                // For better UX, if I press enter here, I probably want to predict based on THIS value.
+                if (predictStudyTimeInput) predictStudyTimeInput.value = '';
+                triggerSubjectPredictBtn.click();
+            }
+        });
+    }
+    if (predictStudyTimeInput) {
+        predictStudyTimeInput.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                if (predictOverallGradeInput) predictOverallGradeInput.value = '';
+                triggerSubjectPredictBtn.click();
+            }
+        });
+    }
+
+    // --- NEW: Mutual Exclusivity for Subject Predictor Inputs ---
+    if (predictOverallGradeInput && predictStudyTimeInput) {
+        console.log('Prediction inputs found, attaching listeners');
+
+        predictOverallGradeInput.addEventListener('input', function () {
+            console.log('Overall Grade Input:', this.value);
+            if (this.value) {
+                console.log('Clearing Study Time Input');
+                predictStudyTimeInput.value = '';
+            }
+        });
+
+        predictStudyTimeInput.addEventListener('input', function () {
+            console.log('Study Time Input:', this.value);
+            if (this.value) {
+                console.log('Clearing Overall Grade Input');
+                predictOverallGradeInput.value = '';
+            }
+        });
+    } else {
+        console.error('Prediction inputs NOT found:', {
+            overall: !!predictOverallGradeInput,
+            study: !!predictStudyTimeInput
+        });
+    }
+
+    // Initialize predictor visibility on load
+    const initialSubject = subjectFilterDropdown ? subjectFilterDropdown.value : '';
+    const initialVisibleSubject = subjectFilterVisible ? subjectFilterVisible.value : '';
+    if (initialSubject && initialSubject !== 'all') {
+        updateSubjectPrediction(initialSubject);
+    } else if (initialVisibleSubject && initialVisibleSubject !== 'all') {
+        updateSubjectPrediction(initialVisibleSubject);
+    }
+
+    // --- Helper Functions ---
+    function showToast(message, type = 'success') {
+        let container = document.querySelector('.toast-container');
+        if (!container) {
+            container = document.createElement('div');
+            container.className = 'toast-container';
+            document.body.appendChild(container);
+        }
+        const toast = document.createElement('div');
+        toast.className = `toast ${type}`;
+        // Allow HTML content for lists
+        toast.innerHTML = message;
+        container.appendChild(toast);
+
+        // Trigger reflow
+        void toast.offsetWidth;
+
+        requestAnimationFrame(() => {
+            toast.classList.add('show');
+        });
+
+        setTimeout(() => {
+            toast.classList.remove('show');
+            toast.addEventListener('transitionend', () => toast.remove());
+        }, 4000); // Increased duration slightly for readability
+    }
+
+    function showConfirmation(message, row, type) {
+        itemToDelete = {
+            row,
+            type
+        };
+        modalMsg.textContent = message;
+        confirmationModal.style.display = 'flex';
+    }
+
+    function hideConfirmation() {
+        itemToDelete = {
         let itemToDelete = {
             row: null,
             type: null
@@ -615,6 +799,54 @@ document.addEventListener('DOMContentLoaded',
             }
         }
 
+    // Helper function to check if a name matches a category's naming pattern
+    function nameMatchesPattern(name, pattern) {
+        if (!name || !pattern) return false;
+
+        // If pattern contains #, check if name matches the pattern with any number
+        if (pattern.includes('#')) {
+            // Convert pattern to regex: "Assignment #" -> "Assignment \d+"
+            const regexPattern = pattern.replace('#', '\\d+');
+            const regex = new RegExp(`^${regexPattern}$`);
+            return regex.test(name);
+        } else {
+            // If pattern doesn't contain #, check exact match or pattern + number
+            if (name === pattern) return true;
+            // Also check if it's pattern + space + number (e.g., "Midterm 1")
+            const regex = new RegExp(`^${pattern}\\s+\\d+$`);
+            return regex.test(name);
+        }
+    }
+
+    function applyWeightPreview(assignmentRow, isEditing = false) {
+        revertWeightPreview();
+
+        // Get subject and category - handle both regular assignments and predictions
+        let subject, category;
+
+        // Try to get from regular assignment selects first
+        const subjectSelect = assignmentRow.querySelector('select[name="subject"]');
+        const categorySelect = assignmentRow.querySelector('select[name="category"]');
+
+        if (subjectSelect && categorySelect) {
+            subject = subjectSelect.value;
+            category = categorySelect.value;
+        } else {
+            // Handle prediction rows
+            const subjectCell = assignmentRow.querySelector('td:nth-child(2)');
+            const predictionCategorySelect = assignmentRow.querySelector('.prediction-category-select');
+
+            if (subjectCell) {
+                subject = subjectCell.textContent.trim();
+            }
+            if (predictionCategorySelect) {
+                category = predictionCategorySelect.value;
+            }
+        }
+
+        if (!subject || !category) return;
+        const categoryData = (weightCategoriesMap[subject] || []).find(c => c.name === category);
+        if (!categoryData) return;
         function applyWeightPreview(assignmentRow, isEditing = false) {
             revertWeightPreview();
             const subject = assignmentRow.querySelector('select[name="subject"]').value;
@@ -628,6 +860,118 @@ document.addEventListener('DOMContentLoaded',
                 // Skip the row being edited to avoid counting it twice
                 if (isEditing && row === assignmentRow) return false;
 
+            const cells = row.querySelectorAll('td');
+            // Check if it's in view mode (not being edited)
+            // cells[0] is checkbox, cells[1] is subject, cells[2] is category
+            if (cells.length > 1 && cells[2].querySelector('.category-tag')) {
+                return cells[1].textContent.trim() === subject &&
+                    cells[2].querySelector('.category-tag').lastChild.textContent.trim() === category;
+            }
+            // Check if it's in edit mode
+            const subjectSelect = row.querySelector('select[name="subject"]');
+            const categorySelect = row.querySelector('select[name="category"]');
+            if (subjectSelect && categorySelect) {
+                return subjectSelect.value === subject && categorySelect.value === category;
+            }
+            // Check if it's a prediction row
+            const predictionCategorySelect = row.querySelector('.prediction-category-select');
+            if (predictionCategorySelect && cells.length > 1) {
+                return cells[1].textContent.trim() === subject &&
+                    predictionCategorySelect.value === category;
+            }
+            return false;
+        });
+
+        const newTotalAssessments = existingRows.length + 1;
+        const newCalculatedWeight = newTotalAssessments > 0 ? (categoryData.total_weight / newTotalAssessments) : 0;
+
+        // Debug logging for weight calculation
+        console.log('Weight Preview Debug:', {
+            subject,
+            category,
+            totalWeight: categoryData.total_weight,
+            existingCount: existingRows.length,
+            newTotalAssessments,
+            newCalculatedWeight: newCalculatedWeight.toFixed(2),
+            isEditing,
+            assignmentRowId: assignmentRow.dataset.id
+        });
+
+        existingRows.forEach(row => {
+            const weightCell = row.querySelectorAll('td')[6]; // Weight is now at index 6
+            weightPreviewState.set(row, weightCell.innerHTML);
+            weightCell.innerHTML = `<em>${newCalculatedWeight.toFixed(2)}%</em>`;
+        });
+    }
+
+    function revertWeightPreview() {
+        weightPreviewState.forEach((originalHtml, row) => {
+            const weightCell = row.querySelectorAll('td')[6]; // Weight is now at index 6
+            if (weightCell) weightCell.innerHTML = originalHtml;
+        });
+        weightPreviewState.clear();
+    }
+
+    function revertPredictorWeightPreview() {
+        predictorWeightPreviewState.forEach((originalHtml, row) => {
+            const weightCell = row.querySelectorAll('td')[6]; // Weight is now at index 6
+            if (weightCell) weightCell.innerHTML = originalHtml;
+        });
+        predictorWeightPreviewState.clear();
+    }
+
+    // --- Stats view grade display toggle ---
+    const statToggleButtons = document.querySelectorAll('[data-stats-toggle]');
+
+    function percentToGpa(percent) {
+        if (percent === null || percent === undefined || isNaN(percent)) return null;
+        return Math.max(0, Math.min(4, (percent / 100) * 4));
+    }
+
+    function applyStatsMode(mode) {
+        statToggleButtons.forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.statsToggle === mode);
+        });
+
+        document.querySelectorAll('.stat-grade').forEach(el => {
+            const percent = parseFloat(el.dataset.gradePercent);
+            if (isNaN(percent)) return;
+            if (mode === 'gpa') {
+                const gpa = percentToGpa(percent);
+                if (gpa !== null) el.textContent = `${gpa.toFixed(2)}`;
+            } else {
+                el.textContent = `${percent.toFixed(1)}%`;
+            }
+        });
+
+        document.querySelectorAll('.stat-grade-per-hour').forEach(el => {
+            const percentPerHour = parseFloat(el.dataset.gradePerHour);
+            if (isNaN(percentPerHour)) return;
+            if (mode === 'gpa') {
+                const gpaPerHour = percentPerHour * 0.04; // convert %/h to GPA(4.0)/h
+                el.textContent = `${gpaPerHour.toFixed(2)}/h`;
+            } else {
+                el.textContent = `${percentPerHour.toFixed(2)}%/h`;
+            }
+        });
+
+        // Update copy labels that mention percent explicitly
+        document.querySelectorAll('[data-toggle-percent-label]').forEach(el => {
+            const percentLabel = el.dataset.togglePercentLabel;
+            const gpaLabel = el.dataset.toggleGpaLabel || percentLabel;
+            el.textContent = mode === 'gpa' ? gpaLabel : percentLabel;
+        });
+
+        localStorage.setItem('statsMode', mode);
+    }
+
+    if (statToggleButtons.length > 0) {
+        const savedMode = localStorage.getItem('statsMode') || 'percent';
+        applyStatsMode(savedMode);
+        statToggleButtons.forEach(btn => {
+            btn.addEventListener('click', () => {
+                const mode = btn.dataset.statsToggle;
+                applyStatsMode(mode);
                 const cells = row.querySelectorAll('td');
                 // Check if it's in view mode (not being edited)
                 // cells[0] is checkbox, cells[1] is subject, cells[2] is category
@@ -768,6 +1112,47 @@ document.addEventListener('DOMContentLoaded',
             if (highHint) highHint.textContent = `(${highCut.toFixed(0)}% / ${highGpa.toFixed(2)} GPA)`;
             if (lowHint) lowHint.textContent = `(${lowCut.toFixed(0)}% / ${lowGpa.toFixed(2)} GPA)`;
 
+
+        const newTotalAssessments = existingRows.length + 1;
+        const newCalculatedWeight = newTotalAssessments > 0 ? (categoryData.total_weight / newTotalAssessments) : 0;
+
+        // Set the predictor weight field
+        if (predictWeight) {
+            predictWeight.value = newCalculatedWeight.toFixed(2);
+        }
+
+        // Apply preview to existing assignments
+        existingRows.forEach(row => {
+            const weightCell = row.querySelectorAll('td')[6]; // Weight is now at index 6
+            predictorWeightPreviewState.set(row, weightCell.innerHTML);
+            weightCell.innerHTML = `<em>${newCalculatedWeight.toFixed(2)}%</em>`;
+        });
+    }
+
+    function createCategoryDropdown(subject, selectedCategory, assignmentId) {
+        const categories = weightCategoriesMap[subject] || [];
+        let options = '<option value="" disabled>-- Select Category --</option>';
+
+        categories.forEach(cat => {
+            const selected = cat.name === selectedCategory ? 'selected' : '';
+            options += `<option value="${cat.name}" ${selected}>${cat.name}</option>`;
+        });
+
+        return `<select class="prediction-category-select" data-id="${assignmentId}" style="width: 120px; padding: 4px;">${options}</select>`;
+    }
+
+    function renderAssignmentTable(assignments, summaryData, subject) {
+        assignmentTableBody.innerHTML = '';
+
+        // Update summary row in thead
+        const table = assignmentTableBody.closest('table');
+        const thead = table ? table.querySelector('thead') : null;
+        if (thead) {
+            // Remove existing summary row if any
+            const existingSummary = thead.querySelector('.summary-row');
+            if (existingSummary) {
+                existingSummary.remove();
+
             if (stats.strongPct === null) {
                 highPctDisplay.textContent = 'N/A';
                 highDesc.textContent = 'Add more graded items to see this metric.';
@@ -900,6 +1285,58 @@ document.addEventListener('DOMContentLoaded',
                     <td>${summaryData.total_weight.toFixed(2)}% (graded)</td>
                     <td>-</td>
                 `;
+
+                thead.appendChild(summaryRow);
+            }
+        }
+
+        assignments.forEach((log, index) => {
+            if (index < 3 || index >= assignments.length - 3) {
+                console.log(`Rendering assignment ${index}:`, { id: log.id, name: log.assignment_name, category: log.category, is_prediction: log.is_prediction, weight: log.weight });
+            }
+            const row = document.createElement('tr');
+            row.dataset.id = log.id;
+
+            // Add prediction class if this is a prediction
+            if (log.is_prediction) {
+                row.classList.add('prediction-row');
+                row.dataset.isPrediction = 'true';
+            }
+
+            // Build the row HTML based on whether it's a prediction
+            if (log.is_prediction) {
+                // Create category dropdown for predictions
+                const categoryDropdownHtml = createCategoryDropdown(log.subject, log.category, log.id);
+
+                row.innerHTML = `<td><input type="checkbox" class="select-assignment" data-id="${log.id}"></td><td>${log.subject}</td><td class="prediction-category-cell" data-id="${log.id}"></td><td><input type="number" name="study_time" class="prediction-input hours-input" data-id="${log.id}" value="${log.study_time || 0}" step="0.1" style="width: 80px;"> hours</td><td><input type="text" name="assignment_name" class="prediction-input" data-id="${log.id}" value="${log.assignment_name}" style="width: 150px;"></td><td><input type="number" name="grade" class="prediction-input grade-input" data-id="${log.id}" value="${log.grade || ''}" step="1" style="width: 80px;">%</td><td>${parseFloat(log.weight).toFixed(2)}%</td><td><button class="action-btn predict-btn">Predict</button><button class="action-btn add-prediction-btn">Add</button><button class="action-btn delete-btn">Delete</button></td>`;
+
+                // Insert the category dropdown
+                const categoryCell = row.querySelector('.prediction-category-cell');
+                if (categoryCell) {
+                    categoryCell.innerHTML = categoryDropdownHtml;
+                }
+
+                // --- NEW: Mutual Exclusivity for Persisted Prediction Rows ---
+                const hoursInput = row.querySelector('.hours-input');
+                const gradeInput = row.querySelector('.grade-input');
+
+                if (hoursInput && gradeInput) {
+                    hoursInput.addEventListener('input', function () {
+                        if (this.value) {
+                            gradeInput.value = '';
+                        }
+                    });
+
+                    gradeInput.addEventListener('input', function () {
+                        if (this.value) {
+                            hoursInput.value = '';
+                        }
+                    });
+                }
+            } else {
+                row.innerHTML = `<td><input type="checkbox" class="select-assignment" data-id="${log.id}"></td><td>${log.subject}</td><td><span class="category-tag"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"></path><line x1="7" y1="7" x2="7.01" y2="7"></line></svg> ${log.category}</span></td><td>${parseFloat(log.study_time).toFixed(1)} hours</td><td>${log.assignment_name}</td><td>${log.grade !== null ? log.grade + '%' : '-'}</td><td>${parseFloat(log.weight).toFixed(2)}%</td><td><button class="action-btn edit-btn">Edit</button><button class="action-btn delete-btn">Delete</button></td>`;
+            }
+
                     thead.appendChild(summaryRow);
                 }
             }
@@ -908,6 +1345,7 @@ document.addEventListener('DOMContentLoaded',
                 const row = document.createElement('tr');
                 row.dataset.id = log.id;
                 row.classList.add('assignment-row');
+
 
                 // Add prediction class if this is a prediction
                 if (log.is_prediction) {
@@ -922,7 +1360,122 @@ document.addEventListener('DOMContentLoaded',
                     row.innerHTML = `<td><span class="drag-handle" title="Drag" aria-label="Drag to reorder" draggable="true">⋮⋮</span><input type="checkbox" class="select-assignment" data-id="${log.id}"></td><td>${log.subject}</td><td><span class="category-tag"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"></path><line x1="7" y1="7" x2="7.01" y2="7"></line></svg> ${log.category}</span></td><td>${parseFloat(log.study_time).toFixed(1)} hours</td><td>${log.assignment_name}</td><td>${log.grade !== null ? log.grade + '%' : '-'}</td><td>${parseFloat(log.weight).toFixed(2)}%</td><td><button class="action-btn edit-btn">Edit</button><button class="action-btn delete-btn">Delete</button></td>`;
                 }
 
+
+        // Update the display
+        totalWeightValue.textContent = totalWeight.toFixed(1);
+
+        // Color code based on total
+        if (totalWeight === 100) {
+            totalWeightIndicator.style.backgroundColor = '#d4edda';
+            totalWeightIndicator.style.color = '#155724';
+            totalWeightIndicator.style.border = '1px solid #c3e6cb';
+        } else if (totalWeight < 100) {
+            totalWeightIndicator.style.backgroundColor = '#fff3cd';
+            totalWeightIndicator.style.color = '#856404';
+            totalWeightIndicator.style.border = '1px solid #ffeeba';
+        } else {
+            totalWeightIndicator.style.backgroundColor = '#f8d7da';
+            totalWeightIndicator.style.color = '#721c24';
+            totalWeightIndicator.style.border = '1px solid #f5c6cb';
+        }
+    }
+
+    async function handleAssignmentSave(row, suppressToast = false, forceAssignment = false) {
+        // --- FIX: Do not revert the preview if validation fails ---
+        if (!validateRow(row)) return;
+        revertWeightPreview(); // Only revert on successful validation
+
+        const logId = row.dataset.id;
+        const isNew = !logId;
+        const url = isNew ? '/add' : `/update/${logId}`;
+        const formData = new FormData();
+
+        // Gather data from inputs
+        row.querySelectorAll('input, select').forEach(el => {
+            if (el.name) formData.append(el.name, el.value);
+        });
+
+        // For prediction rows (and potentially others), subject and category might be text, not inputs
+        // We need to ensure they are present in formData
+        if (!formData.has('subject')) {
+            const subjectCell = row.querySelector('td:nth-child(2)');
+            if (subjectCell) formData.append('subject', subjectCell.textContent.trim());
+        }
+        if (!formData.has('category')) {
+            const categoryCell = row.querySelector('td:nth-child(3)');
+            if (categoryCell) {
+                // Check if it's a prediction row with dropdown
+                const categorySelect = categoryCell.querySelector('.prediction-category-select');
+                if (categorySelect) {
+                    formData.append('category', categorySelect.value);
+                } else {
+                    // Regular row with category tag
+                    const categorySpan = categoryCell.querySelector('.category-tag');
+                    if (categorySpan) {
+                        formData.append('category', categorySpan.lastChild.textContent.trim());
+                    } else {
+                        formData.append('category', categoryCell.textContent.trim());
+                    }
+                }
+            }
+        }
+
+        // Ensure assignment_name is present (it's text in prediction rows)
+        if (!formData.has('assignment_name')) {
+            const nameCell = row.querySelector('td:nth-child(5)');
+            if (nameCell) formData.append('assignment_name', nameCell.textContent.trim());
+        }
+
+        // Ensure study_time and grade are present if they are inputs (they should be caught by querySelectorAll above)
+        // But we need to map class names to form names if they don't have name attributes
+        // In renderAssignmentTable:
+        // <input type="number" class="prediction-input hours-input" ... > -> needs name="study_time"
+        // <input type="number" class="prediction-input grade-input" ... > -> needs name="grade"
+
+        // Let's fix the inputs in renderAssignmentTable to have name attributes, 
+        // OR handle it here. Adding name attributes in renderAssignmentTable is cleaner but requires re-rendering.
+        // Let's handle it here for robustness.
+
+        const hoursInput = row.querySelector('.hours-input');
+        if (hoursInput && !formData.has('study_time')) {
+            formData.append('study_time', hoursInput.value);
+        }
+
+        const gradeInput = row.querySelector('.grade-input');
+        if (gradeInput && !formData.has('grade')) {
+            formData.append('grade', gradeInput.value);
+        }
+
+        // For prediction rows, extract weight from the weight cell (it's displayed as text, not an input)
+        if (!formData.has('weight')) {
+            const weightCell = row.querySelector('td:nth-child(7)');
+            if (weightCell) {
+                const weightText = weightCell.textContent.trim();
+                const weightValue = parseFloat(weightText);
+                if (!isNaN(weightValue)) {
+                    formData.append('weight', weightValue);
+                }
+            }
+        }
+
+        const currentSubjectFilter = subjectFilterDropdown.value;
+        formData.append('current_filter', currentSubjectFilter);
+
+        // Determine is_prediction status
+        // If forceAssignment is true, we are converting to assignment, so is_prediction = false
+        // Otherwise, check both dataset (for client-created rows) and class (for server-rendered rows)
+        let isPrediction = row.dataset.isPrediction === 'true' || row.classList.contains('prediction-row');
+        if (forceAssignment) {
+            isPrediction = false;
+        }
+        formData.append('is_prediction', isPrediction ? 'true' : 'false');
+        try {
+            const response = await fetch(url, {
+                method: 'POST',
+                body: formData
+
                 assignmentTableBody.appendChild(row);
+
             });
 
             // Update summary row based on current state (including predictions toggle)
@@ -1147,12 +1700,53 @@ document.addEventListener('DOMContentLoaded',
                     // Clear any validation alerts when deleting
                     showValidationAlert([]);
 
+
+            if (selectedSubject && selectedCategory) {
+                // Find the category definition to get the default name pattern
+                const categories = weightCategoriesMap[selectedSubject] || [];
+                const categoryDef = categories.find(c => c.name === selectedCategory);
+
+                if (categoryDef) {
+                    // Count existing assignments for this category using precise matching
+                    let existingCount = 0;
+                    const existingRows = assignmentTableBody.querySelectorAll('tr[data-id]');
+                    existingRows.forEach(row => {
+                        const subjCell = row.querySelector('td:nth-child(2)');
+                        const catCell = row.querySelector('td:nth-child(3)');
+
+                        if (subjCell && catCell && subjCell.textContent.trim() === selectedSubject) {
+                            // Use precise category matching
+                            const categoryTag = catCell.querySelector('.category-tag');
+                            if (categoryTag && categoryTag.lastChild.textContent.trim() === selectedCategory) {
+                                existingCount++;
+                            } else {
+                                // Also check for prediction rows
+                                const predictionCategorySelect = catCell.querySelector('.prediction-category-select');
+                                if (predictionCategorySelect && predictionCategorySelect.value === selectedCategory) {
+                                    existingCount++;
+                                }
+                            }
+                        }
+                    });
+
+                    const newCount = existingCount + 1;
+
+                    // Update assignment name if default pattern exists
+                    if (assignmentInput && categoryDef.default_name) {
+                        // Simple replacement of # with count
+                        if (categoryDef.default_name.includes('#')) {
+                            assignmentInput.value = categoryDef.default_name.replace('#', newCount);
+                        } else {
+                            assignmentInput.value = categoryDef.default_name + ' ' + newCount;
+                        }
+
                     const {
                         row,
                         type
                     } = itemToDelete;
                     if (type === 'assignment' && !row.dataset.id) {
                         revertWeightPreview();
+
                     }
                     const itemId = row.dataset.id;
                     if (!itemId) {
@@ -1178,10 +1772,16 @@ document.addEventListener('DOMContentLoaded',
                                 renderAssignmentTable(result.updated_assignments, result.summary, currentFilter);
                                 if (typeof ensureDragHandles === 'function') ensureDragHandles();
 
+
+                    // Calculate and update the weight display
+                    // For a new assignment, the weight will be total_weight / (existing + 1)
+                    const calculatedWeight = (categoryDef.total_weight / newCount).toFixed(2);
+
                                 // Extract category name - handle both edit mode and view mode
                                 let categoryName;
                                 // cells[0] is checkbox, cells[1] is subject, cells[2] is category
                                 const categoryCell = row.querySelectorAll('td')[2];
+
 
                                 // Check if row is in edit mode (has select dropdown)
                                 const categorySelect = categoryCell.querySelector('select[name="category"]');
@@ -1208,6 +1808,15 @@ document.addEventListener('DOMContentLoaded',
                     } finally {
                         hideConfirmation();
                     }
+
+                    console.log('New Row Weight Calculation (addNewRow):', {
+                        subject: selectedSubject,
+                        category: selectedCategory,
+                        totalWeight: categoryDef.total_weight,
+                        existingCount,
+                        newCount,
+                        calculatedWeight
+                    });
                 }
             });
         }
@@ -1285,6 +1894,75 @@ document.addEventListener('DOMContentLoaded',
 
             const gradeAttrs = isGradeLockOn ? 'min="0" max="100"' : 'min="0"';
 
+
+        newRow.appendChild(document.createElement('td')); // Checkbox
+        newRow.appendChild(subjectTd);
+        newRow.appendChild(categoryTd);
+
+        // Inputs
+        if (isPrediction) {
+            newRow.innerHTML += `
+                <td><input type="number" name="study_time" class="prediction-input hours-input" step="0.1" min="0" placeholder="Hours" style="width: 70px;"> hours</td>
+                <td><input type="text" name="assignment_name" class="prediction-input" placeholder="Assignment Name" value="Prediction" style="width: 150px;"></td>
+                <td><input type="number" name="grade" class="prediction-input grade-input" step="1" ${gradeAttrs} placeholder="Grade" style="width: 60px;">%</td>
+                <td class="weight-display">0.00%</td>
+                <td><button class="action-btn predict-btn">Predict</button><button class="action-btn delete-btn">Delete</button></td>
+            `;
+        } else {
+            newRow.innerHTML += `
+                <td><input type="number" name="study_time" step="0.1" min="0" required style="width: 70px;"> hours</td>
+                <td><input type="text" name="assignment_name" required style="width: 150px;"></td>
+                <td><input type="number" name="grade" step="1" ${gradeAttrs} style="width: 60px;">%</td>
+                <td>0.00%</td>
+                <td><button class="action-btn save-btn">Save</button><button class="action-btn delete-btn">Delete</button></td>
+            `;
+        }
+
+        // Re-append subject and category cells because innerHTML += wipes them out
+        const cells = newRow.querySelectorAll('td');
+        cells[1].innerHTML = '';
+        cells[1].appendChild(subjectSelect);
+        cells[2].innerHTML = '';
+        cells[2].appendChild(categorySelect);
+
+        assignmentTableBody.appendChild(newRow);
+
+        // If subject is filtered, trigger change event to populate categories and potentially default name
+        if (isSubjectFiltered) {
+            subjectSelect.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+
+        // --- NEW: Mutual Exclusivity for Prediction Row Inputs ---
+        if (isPrediction) {
+            const hoursInput = newRow.querySelector('.hours-input');
+            const gradeInput = newRow.querySelector('.grade-input');
+
+            if (hoursInput && gradeInput) {
+                hoursInput.addEventListener('input', function () {
+                    if (this.value) {
+                        gradeInput.value = '';
+                    }
+                });
+
+                gradeInput.addEventListener('input', function () {
+                    if (this.value) {
+                        hoursInput.value = '';
+                    }
+                });
+            }
+        }
+    }
+
+    if (addRowBtn) {
+        addRowBtn.addEventListener('click', () => addNewRow(false));
+    }
+
+    const addPredictionBtn = document.getElementById('addPredictionBtn');
+    if (addPredictionBtn) {
+        addPredictionBtn.addEventListener('click', () => {
+            // Check if subject filter is set
+
+
             const currentSubjectFilter = subjectFilterDropdown ? subjectFilterDropdown.value : 'all';
             const isSubjectFiltered = currentSubjectFilter && currentSubjectFilter !== 'all';
 
@@ -1295,6 +1973,14 @@ document.addEventListener('DOMContentLoaded',
             subjectSelect.name = 'subject';
             subjectSelect.required = true;
             subjectSelect.setAttribute('autocomplete', 'off');
+
+
+            // Create an editable prediction row (NOT saved to database yet)
+            // User must select category and click "Predict" or save manually
+            addNewRow(true);  // true = is a prediction
+            showToast('Select a category and enter details, then click Predict', 'info');
+        });
+    }
 
             if (isSubjectFiltered) {
                 const option = document.createElement('option');
@@ -1319,6 +2005,7 @@ document.addEventListener('DOMContentLoaded',
                     subjectSelect.appendChild(option);
                 });
             }
+
 
             const subjectTd = document.createElement('td');
             subjectTd.appendChild(subjectSelect);
@@ -1456,6 +2143,119 @@ document.addEventListener('DOMContentLoaded',
                 const currentSubjectFilter = subjectFilterDropdown ? subjectFilterDropdown.value : 'all';
                 const isSubjectFiltered = currentSubjectFilter && currentSubjectFilter !== 'all';
 
+                // Get all subjects from weightCategoriesMap
+                const allSubjects = Object.keys(weightCategoriesMap);
+
+                // Create subject select dropdown
+                const subjectSelect = document.createElement('select');
+                subjectSelect.name = 'subject';
+                subjectSelect.required = true;
+
+                if (isSubjectFiltered) {
+                    // If filtering by subject, lock it to that subject
+                    const option = document.createElement('option');
+                    option.value = subjectText;
+                    option.textContent = subjectText;
+                    option.selected = true;
+                    subjectSelect.appendChild(option);
+                    subjectSelect.disabled = true;
+                    subjectSelect.style.backgroundColor = '#eee';
+                } else {
+                    // If viewing all subjects, allow editing
+                    allSubjects.forEach(subject => {
+                        const option = document.createElement('option');
+                        option.value = subject;
+                        option.textContent = subject;
+                        if (subject === subjectText) {
+                            option.selected = true;
+                        }
+                        subjectSelect.appendChild(option);
+                    });
+                }
+
+                const categorySelect = document.createElement('select');
+                categorySelect.name = 'category';
+                categorySelect.required = true;
+                if (weightCategoriesMap[subjectText]) {
+                    weightCategoriesMap[subjectText].forEach(cat => {
+                        const option = new Option(cat.name, cat.name);
+                        if (cat.name === categoryText) option.selected = true;
+                        categorySelect.add(option);
+                    });
+                }
+                // Keep checkbox cell empty (cells[0])
+                cells[1].innerHTML = '';
+                cells[1].appendChild(subjectSelect);
+                cells[2].innerHTML = '';
+                cells[2].appendChild(categorySelect);
+                cells[3].innerHTML = `<input type="number" name="study_time" value="${(parseFloat(cells[3].textContent) || 0).toFixed(1)}" step="0.1" min="0" required>`;
+                cells[4].innerHTML = `<input type="text" name="assignment_name" value="${cells[4].textContent.trim()}" required>`;
+                cells[5].innerHTML = `<input type="number" name="grade" value="${gradeValue}" ${gradeAttributes} placeholder="Optional">`;
+                cells[6].innerHTML = `<input type="number" name="weight" value="${parseFloat(cells[6].textContent) || 0}" required readonly style="background-color: #eee;">`;
+            } else if (button.classList.contains('save-btn')) {
+                await handleAssignmentSave(row);
+            } else if (button.classList.contains('delete-btn')) {
+                showConfirmation("Are you sure you want to delete this assignment?", row, 'assignment');
+            } else if (button.classList.contains('add-prediction-btn')) {
+                // Handled by separate event listener below (line ~1897)
+                // That handler does more complex update + conversion
+                return;
+            } else if (button.classList.contains('predict-btn')) {
+                // Handle individual assignment prediction
+                const hoursInput = row.querySelector('.hours-input');
+                const gradeInput = row.querySelector('.grade-input');
+                const weightCell = row.querySelectorAll('td')[6]; // Weight is at index 6
+
+                const hours = hoursInput ? hoursInput.value : '';
+                const grade = gradeInput ? gradeInput.value : '';
+                const weight = weightCell ? parseFloat(weightCell.textContent) : 0;
+
+                // Treat 0 as empty for prediction purposes (allows using 0 to indicate field to predict)
+                const hoursValue = hours && parseFloat(hours) !== 0 ? hours : '';
+                const gradeValue = grade && parseFloat(grade) !== 0 ? grade : '';
+
+                // Validate: need either hours OR grade (target), but not both populated for prediction
+                if (hoursValue && gradeValue) {
+                    showToast('Please clear one field to predict it based on the other.', 'error');
+                    return;
+                }
+                if (!hoursValue && !gradeValue) {
+                    showToast('Please enter either Hours or Target Grade.', 'error');
+                    return;
+                }
+
+                if ((hoursValue && parseFloat(hoursValue) < 0) || (gradeValue && parseFloat(gradeValue) < 0)) {
+                    showToast('Values cannot be negative.', 'error');
+                    return;
+                }
+
+                const subject = row.querySelector('td:nth-child(2)').textContent.trim();
+
+                // Get category from dropdown for predictions, or text for regular assignments
+                const categoryCell = row.querySelector('td:nth-child(3)');
+                const categorySelect = categoryCell.querySelector('.prediction-category-select');
+                let category;
+                if (categorySelect) {
+                    category = categorySelect.value;
+                    if (!category) {
+                        showToast('Please select a category first', 'error');
+                        return;
+                    }
+                } else {
+                    const categoryTag = categoryCell.querySelector('.category-tag');
+                    category = categoryTag ? categoryTag.lastChild.textContent.trim() : categoryCell.textContent.trim();
+                }
+
+                const formData = new FormData();
+                formData.append('subject', subject);
+                formData.append('category', category); // Needed for getting the correct k-value for this category
+                formData.append('weight', weight);
+                formData.append('grade_lock', isGradeLockOn ? 'true' : 'false');
+
+                if (hoursValue) formData.append('hours', hoursValue);
+                if (gradeValue) formData.append('target_grade', gradeValue);
+
+
                 if (!isSubjectFiltered) {
                     showToast('Please select a specific subject to add a prediction', 'error');
                     return;
@@ -1469,6 +2269,7 @@ document.addEventListener('DOMContentLoaded',
                 }
 
                 // Auto-save a new prediction with default values
+
                 try {
                     const formData = new FormData();
                     formData.append('subject', currentSubjectFilter);
@@ -1531,6 +2332,138 @@ document.addEventListener('DOMContentLoaded',
                     subjectSelect.name = 'subject';
                     subjectSelect.required = true;
 
+
+                if (studyTimeInput) studyTimeInput.value = '';
+                if (assignmentNameInput) assignmentNameInput.value = '';
+                if (gradeInput) gradeInput.value = '';
+                if (weightInput) weightInput.value = '';
+
+                // Clear and repopulate category dropdown
+                categorySelect.innerHTML = '<option value="" disabled selected>Select category</option>';
+
+                // Add categories if they exist
+                if (subjectValue && weightCategoriesMap[subjectValue]) {
+                    weightCategoriesMap[subjectValue].forEach(catObj => {
+                        const option = new Option(catObj.name, catObj.name);
+                        categorySelect.add(option);
+                    });
+                }
+            }
+        });
+        assignmentTableBody.addEventListener('change', function (event) {
+            const target = event.target;
+            if (target.name === 'category') {
+                const row = target.closest('tr');
+
+                // Revert any existing weight preview first
+                revertWeightPreview();
+
+                // Clear all fields except subject, category, and assignment name (name cleared conditionally below)
+                const studyTimeInput = row.querySelector('input[name="study_time"]');
+                const assignmentNameInput = row.querySelector('input[name="assignment_name"]');
+                const gradeInput = row.querySelector('input[name="grade"]');
+                const weightInput = row.querySelector('input[name="weight"]');
+
+                // Save current name to check if it should be updated
+                const currentName = assignmentNameInput ? assignmentNameInput.value.trim() : '';
+
+                if (studyTimeInput) studyTimeInput.value = '';
+                if (gradeInput) gradeInput.value = '';
+                if (weightInput) weightInput.value = '';
+
+                // Fill in defaults if category is selected
+                const subject = row.querySelector('select[name="subject"]').value;
+                const categoryName = target.value;
+
+                if (subject && categoryName) {
+                    const categoryData = (weightCategoriesMap[subject] || []).find(c => c.name === categoryName);
+                    if (categoryData) {
+                        // Fill in weight - calculate what the weight will be after adding this assignment
+                        // Count current assignments in this category (from the table, not cached data)
+                        const currentCount = Array.from(assignmentTableBody.querySelectorAll('tr[data-id]')).filter(r => {
+                            const cells = r.querySelectorAll('td');
+                            if (cells.length < 2) return false;
+
+                            const rowSubject = cells[1].textContent.trim();
+                            if (rowSubject !== subject) return false;
+
+                            // Check category using same logic as applyWeightPreview
+                            const categoryTag = cells[2].querySelector('.category-tag');
+                            if (categoryTag) {
+                                return categoryTag.lastChild.textContent.trim() === categoryName;
+                            }
+
+                            // Also check for prediction rows
+                            const predictionCategorySelect = cells[2].querySelector('.prediction-category-select');
+                            if (predictionCategorySelect) {
+                                return predictionCategorySelect.value === categoryName;
+                            }
+
+                            return false;
+                        }).length;
+
+                        // Fill in weight - calculate what the weight will be after adding this assignment
+                        if (weightInput) {
+                            // New weight will be total_weight / (current + 1)
+                            const newWeight = categoryData.total_weight / (currentCount + 1);
+                            weightInput.value = newWeight.toFixed(2);
+
+                            console.log('New Assignment Weight Calculation:', {
+                                subject,
+                                category: categoryName,
+                                totalWeight: categoryData.total_weight,
+                                currentCount,
+                                newWeight: newWeight.toFixed(2)
+                            });
+                        }
+
+                        // Fill in default assignment name if available
+                        // Only update if: name is empty OR matches any category's naming pattern
+                        if (assignmentNameInput && categoryData.default_name) {
+                            const isNewRow = !row.dataset.id;
+
+                            // Check if current name matches any category pattern for this subject
+                            let matchesAnyPattern = false;
+                            if (currentName && !isNewRow) {
+                                const allCategories = weightCategoriesMap[subject] || [];
+                                matchesAnyPattern = allCategories.some(cat => {
+                                    return cat.default_name && nameMatchesPattern(currentName, cat.default_name);
+                                });
+                            }
+
+                            const shouldUpdateName = isNewRow || !currentName || matchesAnyPattern;
+
+                            if (shouldUpdateName) {
+                                if (categoryData.default_name.includes('#')) {
+                                    // Use the precise count from currentCount variable calculated above
+                                    const newCount = currentCount + 1;
+                                    assignmentNameInput.value = categoryData.default_name.replace('#', newCount);
+                                } else {
+                                    assignmentNameInput.value = categoryData.default_name;
+                                }
+                            }
+                        }    // else: preserve the custom name
+                    }
+
+                    // Apply weight preview for both new and edited assignments
+                    const isEditing = !!row.dataset.id;
+                    applyWeightPreview(row, isEditing);
+                }
+            }
+        });
+        assignmentTableBody.addEventListener('keydown', async function (event) {
+            if (event.key === 'Enter' && event.target.matches('input, select')) {
+                // Don't handle Enter for prediction rows (they have their own handler)
+                const row = event.target.closest('tr');
+                if (row && row.classList.contains('prediction-row')) {
+                    return;
+                }
+
+                event.preventDefault();
+                showValidationAlert([]); // Clear old errors before trying to save all
+                const editedRows = assignmentTableBody.querySelectorAll('tr:has(.save-btn)');
+                for (const row of editedRows) {
+
                     if (isSubjectFiltered) {
                         // If filtering by subject, lock it to that subject
                         const option = document.createElement('option');
@@ -1573,6 +2506,7 @@ document.addEventListener('DOMContentLoaded',
                     cells[5].innerHTML = `<input type="number" name="grade" value="${gradeValue}" ${gradeAttributes} placeholder="Optional">`;
                     cells[6].innerHTML = `<input type="number" name="weight" value="${parseFloat(cells[6].textContent) || 0}" required readonly style="background-color: #eee;">`;
                 } else if (button.classList.contains('save-btn')) {
+
                     await handleAssignmentSave(row);
                 } else if (button.classList.contains('delete-btn')) {
                     showConfirmation("Are you sure you want to delete this assignment?", row, 'assignment');
@@ -1655,6 +2589,29 @@ document.addEventListener('DOMContentLoaded',
                 }
             });
 
+
+    // --- Prediction Feature Event Listeners ---
+    if (assignmentTableBody) {
+        // Note: Enter key handling for predictions is done by the handler at line ~1652
+        // which clicks the predict button when Enter is pressed in .prediction-input fields
+
+        // Auto-clear predicted values when user manually edits input fields
+        assignmentTableBody.addEventListener('input', function (event) {
+            const target = event.target;
+            if (!target.classList.contains('prediction-input')) return;
+
+            const row = target.closest('tr');
+            if (!row || !row.classList.contains('prediction-row')) return;
+
+            const hoursInput = row.querySelector('.hours-input');
+            const gradeInput = row.querySelector('.grade-input');
+
+            // If user edits hours field, clear predicted grade
+            if (target.classList.contains('hours-input')) {
+                if (gradeInput && gradeInput.classList.contains('predicted-value')) {
+                    gradeInput.value = '';
+                    gradeInput.classList.remove('predicted-value');
+
             // Enter key support for individual prediction inputs
             assignmentTableBody.addEventListener('keydown', function (e) {
                 if (e.key === 'Enter' && e.target.classList.contains('prediction-input')) {
@@ -1662,6 +2619,7 @@ document.addEventListener('DOMContentLoaded',
                     const row = e.target.closest('tr');
                     const predictBtn = row.querySelector('.predict-btn');
                     if (predictBtn) predictBtn.click();
+
                 }
             });
             assignmentTableBody.addEventListener('change', function (event) {
@@ -1809,6 +2767,149 @@ document.addEventListener('DOMContentLoaded',
                 }
             });
 
+        // Handle prediction name editing - save on blur
+        assignmentTableBody.addEventListener('blur', async function (event) {
+            const target = event.target;
+            if (!target.classList.contains('prediction-name-cell')) return;
+
+            const assignmentId = target.dataset.id;
+            const newName = target.textContent.trim();
+            const row = target.closest('tr');
+
+            if (!assignmentId || !newName || !row) return;
+
+            // Save the updated name
+            const subjectCell = row.querySelector('td:nth-child(2)');
+            const categoryCell = row.querySelector('td:nth-child(3)');
+            const hoursInput = row.querySelector('.hours-input');
+            const gradeInput = row.querySelector('.grade-input');
+            const weightCell = row.querySelector('td:nth-child(7)');
+
+            const formData = new FormData();
+            formData.append('assignment_name', newName);
+            formData.append('subject', subjectCell.textContent.trim());
+
+            const categorySelect = categoryCell.querySelector('.prediction-category-select');
+            if (categorySelect) {
+                formData.append('category', categorySelect.value);
+            }
+
+            formData.append('study_time', hoursInput ? hoursInput.value : 0);
+            formData.append('grade', gradeInput ? gradeInput.value : '');
+            formData.append('weight', parseFloat(weightCell.textContent) || 0);
+            formData.append('is_prediction', 'true');
+
+            try {
+                await fetch(`/update/${assignmentId}`, {
+                    method: 'POST',
+                    body: formData
+                });
+            } catch (error) {
+                console.error('Failed to update prediction name:', error);
+            }
+        }, true);
+
+        // Handle prediction name editing - save on Enter key
+        assignmentTableBody.addEventListener('keydown', function (event) {
+            if (event.key === 'Enter' && event.target.classList.contains('prediction-name-cell')) {
+                event.preventDefault();
+                event.target.blur(); // Trigger blur to save
+            }
+        }, true);
+
+        // Handle category dropdown change for predictions
+        assignmentTableBody.addEventListener('change', function (event) {
+            const target = event.target;
+            if (!target.classList.contains('prediction-category-select')) return;
+
+            const assignmentId = target.dataset.id;
+            const newCategory = target.value;
+            const row = target.closest('tr');
+
+            if (!assignmentId || !newCategory || !row) return;
+
+            // Clear study time and grade fields when category changes
+            const hoursInput = row.querySelector('.hours-input');
+            const gradeInput = row.querySelector('.grade-input');
+            const assignmentNameCell = row.querySelector('td:nth-child(5)');
+
+            // Save current name to check if it should be updated
+            const currentName = assignmentNameCell ? assignmentNameCell.textContent.trim() : '';
+
+            if (hoursInput) hoursInput.value = '';
+            if (gradeInput) gradeInput.value = '';
+
+            // Calculate and update weight display (but don't save to database yet)
+            const subjectCell = row.querySelector('td:nth-child(2)');
+            const subject = subjectCell.textContent.trim();
+            const categories = weightCategoriesMap[subject] || [];
+            const categoryDef = categories.find(c => c.name === newCategory);
+
+            if (categoryDef) {
+                // Count existing assignments in this category (excluding this prediction)
+                const existingInCategory = Array.from(assignmentTableBody.querySelectorAll('tr[data-id]')).filter(r => {
+                    if (r.dataset.id === assignmentId) return false; // Exclude current prediction
+                    const rSubject = r.querySelector('td:nth-child(2)')?.textContent.trim();
+                    const rCategoryCell = r.querySelector('td:nth-child(3)');
+                    let rCategory = '';
+
+                    // Handle both dropdown and text category cells
+                    const categorySelect = rCategoryCell?.querySelector('.prediction-category-select');
+                    if (categorySelect) {
+                        rCategory = categorySelect.value;
+                    } else {
+                        const categoryTag = rCategoryCell?.querySelector('.category-tag');
+                        rCategory = categoryTag?.lastChild?.textContent?.trim() || '';
+                    }
+
+                    return rSubject === subject && rCategory === newCategory;
+                }).length;
+
+                const weight = categoryDef.total_weight / (existingInCategory + 1);
+
+                // Update weight display in the row
+                const weightCell = row.querySelector('td:nth-child(7)');
+                if (weightCell) {
+                    weightCell.textContent = weight.toFixed(2) + '%';
+                }
+
+                // Update assignment name smartly - only if name is empty OR matches a naming pattern
+                if (assignmentNameCell) {
+                    // Check if current name matches any category pattern for this subject
+                    let matchesAnyPattern = false;
+                    if (currentName) {
+                        const allCategories = categories || [];
+                        matchesAnyPattern = allCategories.some(cat => {
+                            return cat.default_name && nameMatchesPattern(currentName, cat.default_name);
+                        });
+                        // Also check if it's just "Prediction"
+                        if (currentName === 'Prediction') {
+                            matchesAnyPattern = true;
+                        }
+                    }
+
+                    const shouldUpdateName = !currentName || matchesAnyPattern;
+
+                    if (shouldUpdateName) {
+                        // If name was empty or matches a pattern, set to new category's default or 'Prediction'
+                        if (categoryDef.default_name) {
+                            if (categoryDef.default_name.includes('#')) {
+                                const count = existingInCategory + 1;
+                                assignmentNameCell.textContent = categoryDef.default_name.replace('#', count);
+                            } else {
+                                assignmentNameCell.textContent = categoryDef.default_name;
+                            }
+                        } else {
+                            assignmentNameCell.textContent = 'Prediction';
+                        }
+                    }
+                    // else: preserve the custom name
+                }
+            }
+
+            // Apply weight preview to show how weights will change for this category
+            applyWeightPreview(row, true);
+        });
 
             // Handle "Add" button click to convert prediction to assignment
             assignmentTableBody.addEventListener('click', async function (event) {
@@ -1822,8 +2923,66 @@ document.addEventListener('DOMContentLoaded',
                 const gradeInput = row.querySelector('.grade-input');
                 const assignmentNameCell = row.querySelector('td:nth-child(5)');
 
+
+            if (!hoursInput || parseFloat(hoursInput.value) <= 0) {
+                showToast('Please enter study time before converting to assignment', 'error');
+                return;
+            }
+
+            const assignmentId = row.dataset.id;
+            if (!assignmentId) {
+                showToast('Please save the prediction first', 'error');
+                return;
+            }
+
+            try {
+                // First, update the prediction with current values
+                const subjectCell = row.querySelector('td:nth-child(2)');
+                const categoryCell = row.querySelector('td:nth-child(3)');
+                const weightCell = row.querySelector('td:nth-child(7)');
+
+                const subject = subjectCell.textContent.trim();
+
+                // Get category from dropdown for predictions
+                const categorySelect = categoryCell.querySelector('.prediction-category-select');
+                let category;
+                if (categorySelect) {
+                    category = categorySelect.value;
+                    if (!category) {
+                        showToast('Please select a category first', 'error');
+                        return;
+                    }
+                } else {
+                    // Fallback to text content for non-predictions
+                    const categoryText = categoryCell.textContent.trim();
+                    const categoryMatch = categoryText.match(/\s*(.+)$/);
+                    category = categoryMatch ? categoryMatch[1].trim() : categoryText;
+                }
+                const assignmentName = assignmentNameCell.textContent.trim() || 'Prediction';
+                const weight = parseFloat(weightCell.textContent) || 0;
+
+                const updateFormData = new FormData();
+                updateFormData.append('subject', subject);
+                updateFormData.append('category', category);
+                updateFormData.append('study_time', hoursInput.value);
+                updateFormData.append('assignment_name', assignmentName);
+                updateFormData.append('grade', gradeInput.value || '');
+                updateFormData.append('weight', weight);
+                updateFormData.append('is_prediction', 'true');
+                updateFormData.append('current_filter', subjectFilterDropdown ? subjectFilterDropdown.value : 'all');
+
+                const updateResponse = await fetch(`/update/${assignmentId}`, {
+                    method: 'POST',
+                    body: updateFormData
+                });
+
+                if (!updateResponse.ok) {
+                    const errorResult = await updateResponse.json();
+                    showToast(errorResult.message || 'Failed to update prediction values', 'error');
+
                 if (!hoursInput || parseFloat(hoursInput.value) <= 0) {
                     showToast('Please enter study time before converting to assignment', 'error');
+
                     return;
                 }
 
@@ -2794,5 +3953,91 @@ document.addEventListener('DOMContentLoaded',
 
 
     });
+
+
+
+            fetch('/rename_subject', {
+                method: 'POST',
+                body: formData
+            })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'success') {
+                        window.location.href = `/subject/${encodeURIComponent(data.new_name)}`;
+                    } else {
+                        showToast(data.message, 'error');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    showToast('An error occurred while renaming the subject', 'error');
+                });
+        });
+    }
+
+    // Convert server-rendered prediction categories to dropdowns on page load
+    function convertPredictionCategoriesToDropdowns() {
+        if (!assignmentTableBody) return;
+
+        const predictionRows = assignmentTableBody.querySelectorAll('tr.prediction-row[data-id]');
+        predictionRows.forEach(row => {
+            const assignmentId = row.dataset.id;
+            const categoryCell = row.querySelector('td:nth-child(3)');
+            if (!categoryCell) return;
+
+            // Check if already converted (has a dropdown)
+            if (categoryCell.querySelector('.prediction-category-select')) return;
+
+            // Extract current category from the text
+            const categoryTag = categoryCell.querySelector('.category-tag');
+            if (!categoryTag) return;
+
+            const currentCategory = categoryTag.lastChild.textContent.trim();
+            const subjectCell = row.querySelector('td:nth-child(2)');
+            const subject = subjectCell ? subjectCell.textContent.trim() : '';
+
+            if (subject && currentCategory) {
+                // Replace content with dropdown
+                categoryCell.classList.add('prediction-category-cell');
+                categoryCell.innerHTML = createCategoryDropdown(subject, currentCategory, assignmentId);
+            }
+        });
+    }
+
+    // Initialize prediction rows (dropdowns + mutual exclusivity)
+    function initializePredictionRows() {
+        convertPredictionCategoriesToDropdowns();
+
+        if (!assignmentTableBody) return;
+        const predictionRows = assignmentTableBody.querySelectorAll('tr.prediction-row');
+
+        predictionRows.forEach(row => {
+            const hoursInput = row.querySelector('.hours-input');
+            const gradeInput = row.querySelector('.grade-input');
+
+            if (hoursInput && gradeInput) {
+                // Remove existing listeners to avoid duplicates? 
+                // It's hard to remove anonymous functions. 
+                // But this runs once on load, so it should be fine.
+
+                hoursInput.addEventListener('input', function () {
+                    if (this.value) {
+                        gradeInput.value = '';
+                    }
+                });
+
+                gradeInput.addEventListener('input', function () {
+                    if (this.value) {
+                        hoursInput.value = '';
+                    }
+                });
+            }
+        });
+    }
+
+    // Run initialization
+    initializePredictionRows();
+
+});
 
 
