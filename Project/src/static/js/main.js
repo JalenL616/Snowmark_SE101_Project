@@ -613,6 +613,25 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     }
 
+    // Helper function to check if a name matches a category's naming pattern
+    function nameMatchesPattern(name, pattern) {
+        if (!name || !pattern) return false;
+
+        // If pattern contains #, check if name matches the pattern with any number
+        if (pattern.includes('#')) {
+            // Convert pattern to regex: "Assignment #" -> "Assignment \d+"
+            const regexPattern = pattern.replace('#', '\\d+');
+            const regex = new RegExp(`^${regexPattern}$`);
+            return regex.test(name);
+        } else {
+            // If pattern doesn't contain #, check exact match or pattern + number
+            if (name === pattern) return true;
+            // Also check if it's pattern + space + number (e.g., "Midterm 1")
+            const regex = new RegExp(`^${pattern}\\s+\\d+$`);
+            return regex.test(name);
+        }
+    }
+
     function applyWeightPreview(assignmentRow, isEditing = false) {
         revertWeightPreview();
 
@@ -673,6 +692,17 @@ document.addEventListener('DOMContentLoaded', function () {
         const newTotalAssessments = existingRows.length + 1;
         const newCalculatedWeight = newTotalAssessments > 0 ? (categoryData.total_weight / newTotalAssessments) : 0;
 
+        // Debug logging for weight calculation
+        console.log('Weight Preview Debug:', {
+            subject,
+            category,
+            totalWeight: categoryData.total_weight,
+            existingCount: existingRows.length,
+            newTotalAssessments,
+            newCalculatedWeight: newCalculatedWeight.toFixed(2),
+            isEditing,
+            assignmentRowId: assignmentRow.dataset.id
+        });
 
         existingRows.forEach(row => {
             const weightCell = row.querySelectorAll('td')[6]; // Weight is now at index 6
@@ -960,7 +990,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 // Create category dropdown for predictions
                 const categoryDropdownHtml = createCategoryDropdown(log.subject, log.category, log.id);
 
-                row.innerHTML = `<td><input type="checkbox" class="select-assignment" data-id="${log.id}"></td><td>${log.subject}</td><td class="prediction-category-cell" data-id="${log.id}"></td><td><input type="number" name="study_time" class="prediction-input hours-input" data-id="${log.id}" value="${log.study_time || 0}" step="0.1" style="width: 80px;"> hours</td><td>${log.assignment_name}</td><td><input type="number" name="grade" class="prediction-input grade-input" data-id="${log.id}" value="${log.grade || ''}" step="1" style="width: 80px;">%</td><td>${parseFloat(log.weight).toFixed(2)}%</td><td><button class="action-btn predict-btn">Predict</button><button class="action-btn add-prediction-btn">Add</button><button class="action-btn delete-btn">Delete</button></td>`;
+                row.innerHTML = `<td><input type="checkbox" class="select-assignment" data-id="${log.id}"></td><td>${log.subject}</td><td class="prediction-category-cell" data-id="${log.id}"></td><td><input type="number" name="study_time" class="prediction-input hours-input" data-id="${log.id}" value="${log.study_time || 0}" step="0.1" style="width: 80px;"> hours</td><td class="prediction-name-cell" contenteditable="true" data-id="${log.id}">${log.assignment_name}</td><td><input type="number" name="grade" class="prediction-input grade-input" data-id="${log.id}" value="${log.grade || ''}" step="1" style="width: 80px;">%</td><td>${parseFloat(log.weight).toFixed(2)}%</td><td><button class="action-btn predict-btn">Predict</button><button class="action-btn add-prediction-btn">Add</button><button class="action-btn delete-btn">Delete</button></td>`;
 
                 // Insert the category dropdown
                 const categoryCell = row.querySelector('.prediction-category-cell');
@@ -1038,12 +1068,6 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     async function handleAssignmentSave(row, suppressToast = false, forceAssignment = false) {
-        console.log('=== HANDLE ASSIGNMENT SAVE CALLED ===', {
-            rowId: row.dataset.id,
-            suppressToast,
-            forceAssignment,
-            stackTrace: new Error().stack
-        });
         // --- FIX: Do not revert the preview if validation fails ---
         if (!validateRow(row)) return;
         revertWeightPreview(); // Only revert on successful validation
@@ -1107,6 +1131,18 @@ document.addEventListener('DOMContentLoaded', function () {
         const gradeInput = row.querySelector('.grade-input');
         if (gradeInput && !formData.has('grade')) {
             formData.append('grade', gradeInput.value);
+        }
+
+        // For prediction rows, extract weight from the weight cell (it's displayed as text, not an input)
+        if (!formData.has('weight')) {
+            const weightCell = row.querySelector('td:nth-child(7)');
+            if (weightCell) {
+                const weightText = weightCell.textContent.trim();
+                const weightValue = parseFloat(weightText);
+                if (!isNaN(weightValue)) {
+                    formData.append('weight', weightValue);
+                }
+            }
         }
 
         const currentSubjectFilter = subjectFilterDropdown.value;
@@ -1401,39 +1437,58 @@ document.addEventListener('DOMContentLoaded', function () {
                 const categoryDef = categories.find(c => c.name === selectedCategory);
 
                 if (categoryDef) {
-                    // Count existing assignments for this category
-                    let count = 1;
+                    // Count existing assignments for this category using precise matching
+                    let existingCount = 0;
                     const existingRows = assignmentTableBody.querySelectorAll('tr[data-id]');
                     existingRows.forEach(row => {
                         const subjCell = row.querySelector('td:nth-child(2)');
                         const catCell = row.querySelector('td:nth-child(3)');
-                        if (subjCell && catCell &&
-                            subjCell.textContent.trim() === selectedSubject &&
-                            catCell.textContent.trim().includes(selectedCategory)) {
-                            count++;
+
+                        if (subjCell && catCell && subjCell.textContent.trim() === selectedSubject) {
+                            // Use precise category matching
+                            const categoryTag = catCell.querySelector('.category-tag');
+                            if (categoryTag && categoryTag.lastChild.textContent.trim() === selectedCategory) {
+                                existingCount++;
+                            } else {
+                                // Also check for prediction rows
+                                const predictionCategorySelect = catCell.querySelector('.prediction-category-select');
+                                if (predictionCategorySelect && predictionCategorySelect.value === selectedCategory) {
+                                    existingCount++;
+                                }
+                            }
                         }
                     });
+
+                    const newCount = existingCount + 1;
 
                     // Update assignment name if default pattern exists
                     if (assignmentInput && categoryDef.default_name) {
                         // Simple replacement of # with count
                         if (categoryDef.default_name.includes('#')) {
-                            assignmentInput.value = categoryDef.default_name.replace('#', count);
+                            assignmentInput.value = categoryDef.default_name.replace('#', newCount);
                         } else {
-                            assignmentInput.value = categoryDef.default_name + ' ' + count;
+                            assignmentInput.value = categoryDef.default_name + ' ' + newCount;
                         }
                     }
 
                     // Calculate and update the weight display
-                    // For a new assignment/prediction, the weight will be total_weight / (existing + 1)
-                    const newTotalAssessments = count;
-                    const calculatedWeight = newTotalAssessments > 0 ? (categoryDef.total_weight / newTotalAssessments).toFixed(2) : '0.00';
+                    // For a new assignment, the weight will be total_weight / (existing + 1)
+                    const calculatedWeight = (categoryDef.total_weight / newCount).toFixed(2);
 
                     // Find the weight cell (7th td, index 6)
                     const weightCell = newRow.querySelector('td:nth-child(7)');
                     if (weightCell) {
                         weightCell.textContent = calculatedWeight + '%';
                     }
+
+                    console.log('New Row Weight Calculation (addNewRow):', {
+                        subject: selectedSubject,
+                        category: selectedCategory,
+                        totalWeight: categoryDef.total_weight,
+                        existingCount,
+                        newCount,
+                        calculatedWeight
+                    });
                 }
             }
         });
@@ -1729,14 +1784,16 @@ document.addEventListener('DOMContentLoaded', function () {
                 // Revert any existing weight preview first
                 revertWeightPreview();
 
-                // Clear all fields except subject and category
+                // Clear all fields except subject, category, and assignment name (name cleared conditionally below)
                 const studyTimeInput = row.querySelector('input[name="study_time"]');
                 const assignmentNameInput = row.querySelector('input[name="assignment_name"]');
                 const gradeInput = row.querySelector('input[name="grade"]');
                 const weightInput = row.querySelector('input[name="weight"]');
 
+                // Save current name to check if it should be updated
+                const currentName = assignmentNameInput ? assignmentNameInput.value.trim() : '';
+
                 if (studyTimeInput) studyTimeInput.value = '';
-                if (assignmentNameInput) assignmentNameInput.value = '';
                 if (gradeInput) gradeInput.value = '';
                 if (weightInput) weightInput.value = '';
 
@@ -1747,22 +1804,70 @@ document.addEventListener('DOMContentLoaded', function () {
                 if (subject && categoryName) {
                     const categoryData = (weightCategoriesMap[subject] || []).find(c => c.name === categoryName);
                     if (categoryData) {
-                        // Fill in weight
+                        // Fill in weight - calculate what the weight will be after adding this assignment
                         if (weightInput) {
-                            if (categoryData.num_assessments > 0) {
-                                weightInput.value = (categoryData.total_weight / categoryData.num_assessments).toFixed(2);
-                            }
+                            // Count current assignments in this category (from the table, not cached data)
+                            const currentCount = Array.from(assignmentTableBody.querySelectorAll('tr[data-id]')).filter(r => {
+                                const cells = r.querySelectorAll('td');
+                                if (cells.length < 2) return false;
+
+                                const rowSubject = cells[1].textContent.trim();
+                                if (rowSubject !== subject) return false;
+
+                                // Check category using same logic as applyWeightPreview
+                                const categoryTag = cells[2].querySelector('.category-tag');
+                                if (categoryTag) {
+                                    return categoryTag.lastChild.textContent.trim() === categoryName;
+                                }
+
+                                // Also check for prediction rows
+                                const predictionCategorySelect = cells[2].querySelector('.prediction-category-select');
+                                if (predictionCategorySelect) {
+                                    return predictionCategorySelect.value === categoryName;
+                                }
+
+                                return false;
+                            }).length;
+
+                            // New weight will be total_weight / (current + 1)
+                            const newWeight = categoryData.total_weight / (currentCount + 1);
+                            weightInput.value = newWeight.toFixed(2);
+
+                            console.log('New Assignment Weight Calculation:', {
+                                subject,
+                                category: categoryName,
+                                totalWeight: categoryData.total_weight,
+                                currentCount,
+                                newWeight: newWeight.toFixed(2)
+                            });
                         }
 
                         // Fill in default assignment name if available
+                        // Only update if: name is empty OR matches any category's naming pattern
                         if (assignmentNameInput && categoryData.default_name) {
-                            if (categoryData.default_name.includes('#')) {
-                                // cells[0] is checkbox, cells[1] is subject, cells[2] is category
-                                const existingCount = Array.from(document.querySelectorAll('#study-table-body tr[data-id]')).filter(r => r.querySelectorAll('td')[2].textContent.trim().includes(categoryName)).length;
-                                assignmentNameInput.value = categoryData.default_name.replace('#', existingCount + 1);
-                            } else {
-                                assignmentNameInput.value = categoryData.default_name;
+                            const isNewRow = !row.dataset.id;
+
+                            // Check if current name matches any category pattern for this subject
+                            let matchesAnyPattern = false;
+                            if (currentName && !isNewRow) {
+                                const allCategories = weightCategoriesMap[subject] || [];
+                                matchesAnyPattern = allCategories.some(cat => {
+                                    return cat.default_name && nameMatchesPattern(currentName, cat.default_name);
+                                });
                             }
+
+                            const shouldUpdateName = isNewRow || !currentName || matchesAnyPattern;
+
+                            if (shouldUpdateName) {
+                                if (categoryData.default_name.includes('#')) {
+                                    // Use the precise count from currentCount variable calculated above
+                                    const newCount = currentCount + 1;
+                                    assignmentNameInput.value = categoryData.default_name.replace('#', newCount);
+                                } else {
+                                    assignmentNameInput.value = categoryData.default_name;
+                                }
+                            }
+                            // else: preserve the custom name
                         }
 
                         // Apply weight preview for both new and edited assignments
@@ -1822,6 +1927,56 @@ document.addEventListener('DOMContentLoaded', function () {
             }
         });
 
+        // Handle prediction name editing - save on blur
+        assignmentTableBody.addEventListener('blur', async function (event) {
+            const target = event.target;
+            if (!target.classList.contains('prediction-name-cell')) return;
+
+            const assignmentId = target.dataset.id;
+            const newName = target.textContent.trim();
+            const row = target.closest('tr');
+
+            if (!assignmentId || !newName || !row) return;
+
+            // Save the updated name
+            const subjectCell = row.querySelector('td:nth-child(2)');
+            const categoryCell = row.querySelector('td:nth-child(3)');
+            const hoursInput = row.querySelector('.hours-input');
+            const gradeInput = row.querySelector('.grade-input');
+            const weightCell = row.querySelector('td:nth-child(7)');
+
+            const formData = new FormData();
+            formData.append('assignment_name', newName);
+            formData.append('subject', subjectCell.textContent.trim());
+
+            const categorySelect = categoryCell.querySelector('.prediction-category-select');
+            if (categorySelect) {
+                formData.append('category', categorySelect.value);
+            }
+
+            formData.append('study_time', hoursInput ? hoursInput.value : 0);
+            formData.append('grade', gradeInput ? gradeInput.value : '');
+            formData.append('weight', parseFloat(weightCell.textContent) || 0);
+            formData.append('is_prediction', 'true');
+
+            try {
+                await fetch(`/update/${assignmentId}`, {
+                    method: 'POST',
+                    body: formData
+                });
+            } catch (error) {
+                console.error('Failed to update prediction name:', error);
+            }
+        }, true);
+
+        // Handle prediction name editing - save on Enter key
+        assignmentTableBody.addEventListener('keydown', function (event) {
+            if (event.key === 'Enter' && event.target.classList.contains('prediction-name-cell')) {
+                event.preventDefault();
+                event.target.blur(); // Trigger blur to save
+            }
+        }, true);
+
         // Handle category dropdown change for predictions
         assignmentTableBody.addEventListener('change', function (event) {
             const target = event.target;
@@ -1836,6 +1991,11 @@ document.addEventListener('DOMContentLoaded', function () {
             // Clear study time and grade fields when category changes
             const hoursInput = row.querySelector('.hours-input');
             const gradeInput = row.querySelector('.grade-input');
+            const assignmentNameCell = row.querySelector('td:nth-child(5)');
+
+            // Save current name to check if it should be updated
+            const currentName = assignmentNameCell ? assignmentNameCell.textContent.trim() : '';
+
             if (hoursInput) hoursInput.value = '';
             if (gradeInput) gradeInput.value = '';
 
@@ -1871,6 +2031,39 @@ document.addEventListener('DOMContentLoaded', function () {
                 const weightCell = row.querySelector('td:nth-child(7)');
                 if (weightCell) {
                     weightCell.textContent = weight.toFixed(2) + '%';
+                }
+
+                // Update assignment name smartly - only if name is empty OR matches a naming pattern
+                if (assignmentNameCell) {
+                    // Check if current name matches any category pattern for this subject
+                    let matchesAnyPattern = false;
+                    if (currentName) {
+                        const allCategories = categories || [];
+                        matchesAnyPattern = allCategories.some(cat => {
+                            return cat.default_name && nameMatchesPattern(currentName, cat.default_name);
+                        });
+                        // Also check if it's just "Prediction"
+                        if (currentName === 'Prediction') {
+                            matchesAnyPattern = true;
+                        }
+                    }
+
+                    const shouldUpdateName = !currentName || matchesAnyPattern;
+
+                    if (shouldUpdateName) {
+                        // If name was empty or matches a pattern, set to new category's default or 'Prediction'
+                        if (categoryDef.default_name) {
+                            if (categoryDef.default_name.includes('#')) {
+                                const count = existingInCategory + 1;
+                                assignmentNameCell.textContent = categoryDef.default_name.replace('#', count);
+                            } else {
+                                assignmentNameCell.textContent = categoryDef.default_name;
+                            }
+                        } else {
+                            assignmentNameCell.textContent = 'Prediction';
+                        }
+                    }
+                    // else: preserve the custom name
                 }
             }
 

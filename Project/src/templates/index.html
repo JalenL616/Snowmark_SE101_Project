@@ -179,7 +179,7 @@
                                     <td><input type="number" name="study_time" class="prediction-input hours-input" data-id="{{ row.id }}"
                                             value="{{ row.study_time }}" step="0.1" min="0" style="width: 80px;"> hours
                                     </td>
-                                    <td>{{ row.assignment_name }}</td>
+                                    <td class="prediction-name-cell" contenteditable="true" data-id="{{ row.id }}">{{ row.assignment_name }}</td>
                                     <td><input type="number" name="grade" class="prediction-input grade-input" data-id="{{ row.id }}"
                                             value="{{ row.grade }}" step="1" min="0" style="width: 80px;">%</td>
                                     {% else %}
