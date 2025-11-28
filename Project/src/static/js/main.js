@@ -615,8 +615,30 @@ document.addEventListener('DOMContentLoaded', function () {
 
     function applyWeightPreview(assignmentRow, isEditing = false) {
         revertWeightPreview();
-        const subject = assignmentRow.querySelector('select[name="subject"]').value;
-        const category = assignmentRow.querySelector('select[name="category"]').value;
+
+        // Get subject and category - handle both regular assignments and predictions
+        let subject, category;
+
+        // Try to get from regular assignment selects first
+        const subjectSelect = assignmentRow.querySelector('select[name="subject"]');
+        const categorySelect = assignmentRow.querySelector('select[name="category"]');
+
+        if (subjectSelect && categorySelect) {
+            subject = subjectSelect.value;
+            category = categorySelect.value;
+        } else {
+            // Handle prediction rows
+            const subjectCell = assignmentRow.querySelector('td:nth-child(2)');
+            const predictionCategorySelect = assignmentRow.querySelector('.prediction-category-select');
+
+            if (subjectCell) {
+                subject = subjectCell.textContent.trim();
+            }
+            if (predictionCategorySelect) {
+                category = predictionCategorySelect.value;
+            }
+        }
+
         if (!subject || !category) return;
         const categoryData = (weightCategoriesMap[subject] || []).find(c => c.name === category);
         if (!categoryData) return;
@@ -638,6 +660,12 @@ document.addEventListener('DOMContentLoaded', function () {
             const categorySelect = row.querySelector('select[name="category"]');
             if (subjectSelect && categorySelect) {
                 return subjectSelect.value === subject && categorySelect.value === category;
+            }
+            // Check if it's a prediction row
+            const predictionCategorySelect = row.querySelector('.prediction-category-select');
+            if (predictionCategorySelect && cells.length > 1) {
+                return cells[1].textContent.trim() === subject &&
+                    predictionCategorySelect.value === category;
             }
             return false;
         });
@@ -1608,7 +1636,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
                 const formData = new FormData();
                 formData.append('subject', subject);
-                // formData.append('category', category); // Not strictly needed for k-estimation but good for context if needed
+                formData.append('category', category); // Needed for getting the correct k-value for this category
                 formData.append('weight', weight);
                 formData.append('grade_lock', isGradeLockOn ? 'true' : 'false');
 
@@ -1795,7 +1823,7 @@ document.addEventListener('DOMContentLoaded', function () {
         });
 
         // Handle category dropdown change for predictions
-        assignmentTableBody.addEventListener('change', async function (event) {
+        assignmentTableBody.addEventListener('change', function (event) {
             const target = event.target;
             if (!target.classList.contains('prediction-category-select')) return;
 
@@ -1805,89 +1833,49 @@ document.addEventListener('DOMContentLoaded', function () {
 
             if (!assignmentId || !newCategory || !row) return;
 
-            try {
-                // Get current prediction data
-                const subjectCell = row.querySelector('td:nth-child(2)');
-                const hoursInput = row.querySelector('.hours-input');
-                const gradeInput = row.querySelector('.grade-input');
-                const assignmentNameCell = row.querySelector('td:nth-child(5)');
+            // Clear study time and grade fields when category changes
+            const hoursInput = row.querySelector('.hours-input');
+            const gradeInput = row.querySelector('.grade-input');
+            if (hoursInput) hoursInput.value = '';
+            if (gradeInput) gradeInput.value = '';
 
-                const subject = subjectCell.textContent.trim();
-                const studyTime = parseFloat(hoursInput.value) || 0;
-                const grade = gradeInput.value ? parseFloat(gradeInput.value) : null;
-                const assignmentName = assignmentNameCell.textContent.trim() || 'Prediction';
+            // Calculate and update weight display (but don't save to database yet)
+            const subjectCell = row.querySelector('td:nth-child(2)');
+            const subject = subjectCell.textContent.trim();
+            const categories = weightCategoriesMap[subject] || [];
+            const categoryDef = categories.find(c => c.name === newCategory);
 
-                // Calculate new weight for the selected category
-                const categories = weightCategoriesMap[subject] || [];
-                const categoryDef = categories.find(c => c.name === newCategory);
+            if (categoryDef) {
+                // Count existing assignments in this category (excluding this prediction)
+                const existingInCategory = Array.from(assignmentTableBody.querySelectorAll('tr[data-id]')).filter(r => {
+                    if (r.dataset.id === assignmentId) return false; // Exclude current prediction
+                    const rSubject = r.querySelector('td:nth-child(2)')?.textContent.trim();
+                    const rCategoryCell = r.querySelector('td:nth-child(3)');
+                    let rCategory = '';
 
-                let weight = 0;
-                if (categoryDef) {
-                    // Count existing assignments in this category (excluding this prediction)
-                    const existingInCategory = Array.from(assignmentTableBody.querySelectorAll('tr[data-id]')).filter(r => {
-                        if (r.dataset.id === assignmentId) return false; // Exclude current prediction
-                        const rSubject = r.querySelector('td:nth-child(2)')?.textContent.trim();
-                        const rCategoryCell = r.querySelector('td:nth-child(3)');
-                        let rCategory = '';
-
-                        // Handle both dropdown and text category cells
-                        const categorySelect = rCategoryCell?.querySelector('.prediction-category-select');
-                        if (categorySelect) {
-                            rCategory = categorySelect.value;
-                        } else {
-                            const categoryTag = rCategoryCell?.querySelector('.category-tag');
-                            rCategory = categoryTag?.lastChild?.textContent?.trim() || '';
-                        }
-
-                        return rSubject === subject && rCategory === newCategory;
-                    }).length;
-
-                    weight = categoryDef.total_weight / (existingInCategory + 1);
-                }
-
-                // Update the prediction in the database
-                const formData = new FormData();
-                formData.append('id', assignmentId);
-                formData.append('subject', subject);
-                formData.append('category', newCategory);
-                formData.append('study_time', studyTime);
-                formData.append('assignment_name', assignmentName);
-                if (grade !== null) {
-                    formData.append('grade', grade);
-                }
-                formData.append('weight', weight);
-                formData.append('is_prediction', 'true');
-
-                const response = await fetch(`/update/${assignmentId}`, {
-                    method: 'POST',
-                    body: formData
-                });
-
-                const result = await response.json();
-
-                if (response.ok) {
-                    showToast('Prediction category updated', 'success');
-
-                    // Update the weight display in the row
-                    const weightCell = row.querySelector('td:nth-child(7)');
-                    if (weightCell) {
-                        weightCell.textContent = weight.toFixed(2) + '%';
+                    // Handle both dropdown and text category cells
+                    const categorySelect = rCategoryCell?.querySelector('.prediction-category-select');
+                    if (categorySelect) {
+                        rCategory = categorySelect.value;
+                    } else {
+                        const categoryTag = rCategoryCell?.querySelector('.category-tag');
+                        rCategory = categoryTag?.lastChild?.textContent?.trim() || '';
                     }
 
-                    // Refresh the table to recalculate weights
-                    const currentSubjectFilter = subjectFilterDropdown ? subjectFilterDropdown.value : 'all';
-                    if (result.updated_assignments && result.summary) {
-                        renderAssignmentTable(result.updated_assignments, result.summary, currentSubjectFilter);
-                    }
-                } else {
-                    showToast(result.message || 'Failed to update category', 'error');
-                    // Revert dropdown to original value if update failed
-                    target.value = row.dataset.originalCategory || '';
+                    return rSubject === subject && rCategory === newCategory;
+                }).length;
+
+                const weight = categoryDef.total_weight / (existingInCategory + 1);
+
+                // Update weight display in the row
+                const weightCell = row.querySelector('td:nth-child(7)');
+                if (weightCell) {
+                    weightCell.textContent = weight.toFixed(2) + '%';
                 }
-            } catch (error) {
-                console.error('Failed to update prediction category:', error);
-                showToast('Network error occurred', 'error');
             }
+
+            // Apply weight preview to show how weights will change for this category
+            applyWeightPreview(row, true);
         });
 
         // Handle "Add" button click to convert prediction to assignment
