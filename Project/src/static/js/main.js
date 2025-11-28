@@ -254,6 +254,32 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
 
+    // --- NEW: Mutual Exclusivity for Subject Predictor Inputs ---
+    if (predictOverallGradeInput && predictStudyTimeInput) {
+        console.log('Prediction inputs found, attaching listeners');
+
+        predictOverallGradeInput.addEventListener('input', function () {
+            console.log('Overall Grade Input:', this.value);
+            if (this.value) {
+                console.log('Clearing Study Time Input');
+                predictStudyTimeInput.value = '';
+            }
+        });
+
+        predictStudyTimeInput.addEventListener('input', function () {
+            console.log('Study Time Input:', this.value);
+            if (this.value) {
+                console.log('Clearing Overall Grade Input');
+                predictOverallGradeInput.value = '';
+            }
+        });
+    } else {
+        console.error('Prediction inputs NOT found:', {
+            overall: !!predictOverallGradeInput,
+            study: !!predictStudyTimeInput
+        });
+    }
+
     // Initialize predictor visibility on load
     const initialSubject = subjectFilterDropdown ? subjectFilterDropdown.value : '';
     const initialVisibleSubject = subjectFilterVisible ? subjectFilterVisible.value : '';
@@ -974,7 +1000,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
         assignments.forEach((log, index) => {
             if (index < 3 || index >= assignments.length - 3) {
-                console.log(`Rendering assignment ${index}:`, {id: log.id, name: log.assignment_name, category: log.category, is_prediction: log.is_prediction, weight: log.weight});
+                console.log(`Rendering assignment ${index}:`, { id: log.id, name: log.assignment_name, category: log.category, is_prediction: log.is_prediction, weight: log.weight });
             }
             const row = document.createElement('tr');
             row.dataset.id = log.id;
@@ -996,6 +1022,24 @@ document.addEventListener('DOMContentLoaded', function () {
                 const categoryCell = row.querySelector('.prediction-category-cell');
                 if (categoryCell) {
                     categoryCell.innerHTML = categoryDropdownHtml;
+                }
+
+                // --- NEW: Mutual Exclusivity for Persisted Prediction Rows ---
+                const hoursInput = row.querySelector('.hours-input');
+                const gradeInput = row.querySelector('.grade-input');
+
+                if (hoursInput && gradeInput) {
+                    hoursInput.addEventListener('input', function () {
+                        if (this.value) {
+                            gradeInput.value = '';
+                        }
+                    });
+
+                    gradeInput.addEventListener('input', function () {
+                        if (this.value) {
+                            hoursInput.value = '';
+                        }
+                    });
                 }
             } else {
                 row.innerHTML = `<td><input type="checkbox" class="select-assignment" data-id="${log.id}"></td><td>${log.subject}</td><td><span class="category-tag"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"></path><line x1="7" y1="7" x2="7.01" y2="7"></line></svg> ${log.category}</span></td><td>${parseFloat(log.study_time).toFixed(1)} hours</td><td>${log.assignment_name}</td><td>${log.grade !== null ? log.grade + '%' : '-'}</td><td>${parseFloat(log.weight).toFixed(2)}%</td><td><button class="action-btn edit-btn">Edit</button><button class="action-btn delete-btn">Delete</button></td>`;
@@ -1532,6 +1576,26 @@ document.addEventListener('DOMContentLoaded', function () {
         if (isSubjectFiltered) {
             subjectSelect.dispatchEvent(new Event('change', { bubbles: true }));
         }
+
+        // --- NEW: Mutual Exclusivity for Prediction Row Inputs ---
+        if (isPrediction) {
+            const hoursInput = newRow.querySelector('.hours-input');
+            const gradeInput = newRow.querySelector('.grade-input');
+
+            if (hoursInput && gradeInput) {
+                hoursInput.addEventListener('input', function () {
+                    if (this.value) {
+                        gradeInput.value = '';
+                    }
+                });
+
+                gradeInput.addEventListener('input', function () {
+                    if (this.value) {
+                        hoursInput.value = '';
+                    }
+                });
+            }
+        }
     }
 
     if (addRowBtn) {
@@ -1805,30 +1869,31 @@ document.addEventListener('DOMContentLoaded', function () {
                     const categoryData = (weightCategoriesMap[subject] || []).find(c => c.name === categoryName);
                     if (categoryData) {
                         // Fill in weight - calculate what the weight will be after adding this assignment
+                        // Count current assignments in this category (from the table, not cached data)
+                        const currentCount = Array.from(assignmentTableBody.querySelectorAll('tr[data-id]')).filter(r => {
+                            const cells = r.querySelectorAll('td');
+                            if (cells.length < 2) return false;
+
+                            const rowSubject = cells[1].textContent.trim();
+                            if (rowSubject !== subject) return false;
+
+                            // Check category using same logic as applyWeightPreview
+                            const categoryTag = cells[2].querySelector('.category-tag');
+                            if (categoryTag) {
+                                return categoryTag.lastChild.textContent.trim() === categoryName;
+                            }
+
+                            // Also check for prediction rows
+                            const predictionCategorySelect = cells[2].querySelector('.prediction-category-select');
+                            if (predictionCategorySelect) {
+                                return predictionCategorySelect.value === categoryName;
+                            }
+
+                            return false;
+                        }).length;
+
+                        // Fill in weight - calculate what the weight will be after adding this assignment
                         if (weightInput) {
-                            // Count current assignments in this category (from the table, not cached data)
-                            const currentCount = Array.from(assignmentTableBody.querySelectorAll('tr[data-id]')).filter(r => {
-                                const cells = r.querySelectorAll('td');
-                                if (cells.length < 2) return false;
-
-                                const rowSubject = cells[1].textContent.trim();
-                                if (rowSubject !== subject) return false;
-
-                                // Check category using same logic as applyWeightPreview
-                                const categoryTag = cells[2].querySelector('.category-tag');
-                                if (categoryTag) {
-                                    return categoryTag.lastChild.textContent.trim() === categoryName;
-                                }
-
-                                // Also check for prediction rows
-                                const predictionCategorySelect = cells[2].querySelector('.prediction-category-select');
-                                if (predictionCategorySelect) {
-                                    return predictionCategorySelect.value === categoryName;
-                                }
-
-                                return false;
-                            }).length;
-
                             // New weight will be total_weight / (current + 1)
                             const newWeight = categoryData.total_weight / (currentCount + 1);
                             weightInput.value = newWeight.toFixed(2);
@@ -1867,13 +1932,12 @@ document.addEventListener('DOMContentLoaded', function () {
                                     assignmentNameInput.value = categoryData.default_name;
                                 }
                             }
-                            // else: preserve the custom name
-                        }
-
-                        // Apply weight preview for both new and edited assignments
-                        const isEditing = !!row.dataset.id;
-                        applyWeightPreview(row, isEditing);
+                        }    // else: preserve the custom name
                     }
+
+                    // Apply weight preview for both new and edited assignments
+                    const isEditing = !!row.dataset.id;
+                    applyWeightPreview(row, isEditing);
                 }
             }
         });
@@ -2868,20 +2932,49 @@ document.addEventListener('DOMContentLoaded', function () {
             if (!categoryTag) return;
 
             const currentCategory = categoryTag.lastChild.textContent.trim();
-
-            // Get subject from the row
             const subjectCell = row.querySelector('td:nth-child(2)');
             const subject = subjectCell ? subjectCell.textContent.trim() : '';
 
-            if (!subject) return;
-
-            // Create and insert the category dropdown
-            const dropdownHtml = createCategoryDropdown(subject, currentCategory, assignmentId);
-            categoryCell.innerHTML = dropdownHtml;
+            if (subject && currentCategory) {
+                // Replace content with dropdown
+                categoryCell.classList.add('prediction-category-cell');
+                categoryCell.innerHTML = createCategoryDropdown(subject, currentCategory, assignmentId);
+            }
         });
     }
 
-    // Run the conversion on page load
-    convertPredictionCategoriesToDropdowns();
+    // Initialize prediction rows (dropdowns + mutual exclusivity)
+    function initializePredictionRows() {
+        convertPredictionCategoriesToDropdowns();
+
+        if (!assignmentTableBody) return;
+        const predictionRows = assignmentTableBody.querySelectorAll('tr.prediction-row');
+
+        predictionRows.forEach(row => {
+            const hoursInput = row.querySelector('.hours-input');
+            const gradeInput = row.querySelector('.grade-input');
+
+            if (hoursInput && gradeInput) {
+                // Remove existing listeners to avoid duplicates? 
+                // It's hard to remove anonymous functions. 
+                // But this runs once on load, so it should be fine.
+
+                hoursInput.addEventListener('input', function () {
+                    if (this.value) {
+                        gradeInput.value = '';
+                    }
+                });
+
+                gradeInput.addEventListener('input', function () {
+                    if (this.value) {
+                        hoursInput.value = '';
+                    }
+                });
+            }
+        });
+    }
+
+    // Run initialization
+    initializePredictionRows();
 
 });
