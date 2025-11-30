@@ -79,15 +79,11 @@
                 <a href="{{ url_for('about') }}" class="nav-link">About</a>
             </div>
             <div class="nav-actions">
-                <div style="display: flex; align-items: center; gap: 6px; margin-right: 10px;">
-                    <span title="Default (Frosty)" style="font-size: 1.2em; cursor: default;">❄️</span>
-                    <label class="switch nav-switch" title="Toggle Color Scheme (Default/Toasty)">
-                        <input type="checkbox" id="scheme-toggle">
-                        <span class="slider"></span>
-                    </label>
-                    <span title="Toasty" style="font-size: 1.2em; cursor: default;">🔥</span>
-                </div>
-                <label class="switch nav-switch" title="Toggle Dark Mode">
+                <label class="switch icon-switch scheme-switch nav-switch" title="Toggle Color Scheme (Frosty/Toasty)">
+                    <input type="checkbox" id="scheme-toggle">
+                    <span class="slider"></span>
+                </label>
+                <label class="switch icon-switch theme-switch nav-switch" title="Toggle Dark Mode">
                     <input type="checkbox" id="theme-toggle">
                     <span class="slider"></span>
                 </label>

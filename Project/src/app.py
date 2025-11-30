@@ -334,7 +334,7 @@ def render_subject_view(filter_subject, is_retired_subject=False):
         if total_hours > 0:  # Only include subjects with study time
             chart_data[s] = total_hours
             
-    page_title = "All Subjects" if filter_subject == 'all' else filter_subject
+    page_title = "Dashboard" if filter_subject == 'all' else filter_subject
     is_dashboard = filter_subject == 'all'
 
     return render_template(

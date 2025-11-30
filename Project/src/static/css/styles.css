@@ -184,6 +184,25 @@ body.toasty-mode.dark-mode .edit-btn:hover {
     background-color: var(--primary-hover) !important;
 }
 
+/* Edit button in toasty light mode - black text */
+body.toasty-mode .edit-btn {
+    color: #000 !important;
+}
+
+/* Predict button in toasty light mode - black text */
+body.toasty-mode .predict-btn,
+body.toasty-mode #predict-btn,
+body.toasty-mode #show-predictions-btn {
+    color: #000 !important;
+}
+
+/* Predict button in toasty dark mode - black text */
+body.toasty-mode.dark-mode .predict-btn,
+body.toasty-mode.dark-mode #predict-btn,
+body.toasty-mode.dark-mode #show-predictions-btn {
+    color: #000 !important;
+}
+
 /* Darker yellow/gold for grade lock on in Toasty Dark Mode */
 body.toasty-mode.dark-mode .grade-lock-btn.lock-on,
 body.toasty-mode.dark-mode #grade-lock-btn.lock-on,
@@ -331,6 +350,78 @@ input:checked+.slider:before {
     transform: translateX(20px);
 }
 
+/* Icon switches - larger size with emoji icons */
+.switch.icon-switch {
+    width: 56px;
+    height: 28px;
+}
+
+.switch.icon-switch .slider {
+    border-radius: 28px;
+}
+
+.switch.icon-switch .slider:before {
+    height: 22px;
+    width: 22px;
+    left: 3px;
+    bottom: 3px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+}
+
+.switch.icon-switch input:checked + .slider:before {
+    transform: translateX(28px);
+}
+
+/* Theme toggle (sun/moon) */
+.switch.theme-switch .slider {
+    background-color: #87CEEB;
+}
+
+.switch.theme-switch .slider:before {
+    content: "☀️";
+    background-color: white;
+}
+
+.switch.theme-switch input:checked + .slider {
+    background-color: #2c3e50;
+}
+
+.switch.theme-switch input:checked + .slider:before {
+    content: "🌙";
+    background-color: #1a1a2e;
+}
+
+/* Scheme toggle (frosty/toasty) */
+.switch.scheme-switch .slider {
+    background-color: #87CEEB;
+}
+
+.switch.scheme-switch .slider:before {
+    content: "❄️";
+    background-color: white;
+}
+
+.switch.scheme-switch input:checked + .slider {
+    background-color: #e07b39;
+}
+
+.switch.scheme-switch input:checked + .slider:before {
+    content: "🔥";
+    background-color: #5c4033;
+}
+
+/* Dark mode adjustments for switch circles */
+body.dark-mode .switch.scheme-switch .slider:before {
+    background-color: #1a1a2e;
+}
+
+body.dark-mode .switch.scheme-switch input:checked + .slider:before {
+    background-color: #3d2817;
+}
+
 /* Submenu */
 .has-submenu .submenu {
     display: none;
@@ -473,6 +564,7 @@ input:checked+.slider:before {
 .nav-dropdown {
     position: relative;
     top: 1px;
+    padding-bottom: 5px;
 }
 
 .nav-dropdown .dropdown-toggle .arrow {
@@ -495,7 +587,18 @@ input:checked+.slider:before {
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
     z-index: 1000;
     padding: 5px 0;
-    margin-top: 5px;
+    padding-top: 10px;
+    margin-top: 0;
+}
+
+.nav-dropdown .dropdown-menu::before {
+    content: '';
+    position: absolute;
+    top: -5px;
+    left: 0;
+    right: 0;
+    height: 10px;
+    background: transparent;
 }
 
 .nav-dropdown:hover .dropdown-menu,
@@ -571,6 +674,12 @@ input:checked+.slider:before {
 /* Menu button hidden - using top nav */
 .menu-btn {
     display: none;
+}
+
+.nav-center {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
 }
 
 .nav-center h1 {
@@ -719,17 +828,75 @@ button:active {
 
 #addRowBtn,
 #addCategoryBtn,
+#addPredictionBtn,
+.add-prediction-btn,
 #predict-btn,
 #subject-modal-confirm {
-    background-color: var(--primary-color);
+    background-color: #006a8a;
     color: white;
 }
 
 #addRowBtn:hover,
 #addCategoryBtn:hover,
+#addPredictionBtn:hover,
+.add-prediction-btn:hover,
 #predict-btn:hover,
 #subject-modal-confirm:hover {
-    background-color: var(--primary-hover);
+    background-color: #005570;
+}
+
+/* Dark mode add buttons - lighter shade */
+body.dark-mode #addRowBtn,
+body.dark-mode #addCategoryBtn,
+body.dark-mode #addPredictionBtn,
+body.dark-mode .add-prediction-btn,
+body.dark-mode #subject-modal-confirm {
+    background-color: #00a8d6;
+    color: white;
+}
+
+body.dark-mode #addRowBtn:hover,
+body.dark-mode #addCategoryBtn:hover,
+body.dark-mode #addPredictionBtn:hover,
+body.dark-mode .add-prediction-btn:hover,
+body.dark-mode #subject-modal-confirm:hover {
+    background-color: #00c4f5;
+}
+
+/* Toasty light mode add buttons - warm brown/orange */
+body.toasty-mode #addRowBtn,
+body.toasty-mode #addCategoryBtn,
+body.toasty-mode #addPredictionBtn,
+body.toasty-mode .add-prediction-btn,
+body.toasty-mode #subject-modal-confirm {
+    background-color: #8b4513;
+    color: white;
+}
+
+body.toasty-mode #addRowBtn:hover,
+body.toasty-mode #addCategoryBtn:hover,
+body.toasty-mode #addPredictionBtn:hover,
+body.toasty-mode .add-prediction-btn:hover,
+body.toasty-mode #subject-modal-confirm:hover {
+    background-color: #6b3410;
+}
+
+/* Toasty dark mode add buttons - lighter warm shade */
+body.toasty-mode.dark-mode #addRowBtn,
+body.toasty-mode.dark-mode #addCategoryBtn,
+body.toasty-mode.dark-mode #addPredictionBtn,
+body.toasty-mode.dark-mode .add-prediction-btn,
+body.toasty-mode.dark-mode #subject-modal-confirm {
+    background-color: #d2691e;
+    color: white;
+}
+
+body.toasty-mode.dark-mode #addRowBtn:hover,
+body.toasty-mode.dark-mode #addCategoryBtn:hover,
+body.toasty-mode.dark-mode #addPredictionBtn:hover,
+body.toasty-mode.dark-mode .add-prediction-btn:hover,
+body.toasty-mode.dark-mode #subject-modal-confirm:hover {
+    background-color: #e07b39;
 }
 
 .delete-btn,
@@ -761,6 +928,11 @@ body.dark-mode .edit-btn {
 
 body.dark-mode .edit-btn:hover {
     background-color: #4a56c8;
+}
+
+/* Retire subject button - black text in dark mode */
+body.dark-mode #retire-subject-btn {
+    color: #000 !important;
 }
 
 .grade-lock-btn {
@@ -1408,13 +1580,23 @@ body.dark-mode .prediction-row {
 }
 
 .predict-btn {
-    background-color: var(--accent-color);
+    background-color: #5a9bd5;
     color: white;
     margin-right: 5px;
 }
 
 .predict-btn:hover {
-    background-color: #5a67d8;
+    background-color: #4a87be;
+}
+
+/* Toasty light mode predict button - orange */
+body.toasty-mode .predict-btn {
+    background-color: #e07b39;
+    color: white;
+}
+
+body.toasty-mode .predict-btn:hover {
+    background-color: #c9692e;
 }
 
 .add-prediction-btn {

@@ -1710,6 +1710,69 @@ document.addEventListener('DOMContentLoaded',
             const isGradeLockOn = currentSubject !== 'all' ? getGradeLock(currentSubject) : true;
             const gradeAttrs = isGradeLockOn ? 'min="0" max="100"' : 'min="0"';
 
+            // Get current subject filter
+            const currentSubjectFilter = subjectFilterDropdown ? subjectFilterDropdown.value : 'all';
+            const isSubjectFiltered = currentSubjectFilter && currentSubjectFilter !== 'all';
+            const allSubjects = Object.keys(weightCategoriesMap);
+
+            // Create subject select
+            const subjectSelect = document.createElement('select');
+            subjectSelect.name = 'subject';
+            subjectSelect.required = true;
+            subjectSelect.setAttribute('autocomplete', 'off');
+
+            if (isSubjectFiltered) {
+                // If filtered, only show the filtered subject
+                const option = document.createElement('option');
+                option.value = currentSubjectFilter;
+                option.textContent = currentSubjectFilter;
+                option.selected = true;
+                subjectSelect.appendChild(option);
+            } else {
+                // Show all subjects
+                allSubjects.forEach(subj => {
+                    const option = document.createElement('option');
+                    option.value = subj;
+                    option.textContent = subj;
+                    subjectSelect.appendChild(option);
+                });
+            }
+
+            // Create category select
+            const categorySelect = document.createElement('select');
+            categorySelect.name = 'category';
+            categorySelect.required = true;
+            categorySelect.setAttribute('autocomplete', 'off');
+
+            // Populate categories based on selected subject
+            const selectedSubject = isSubjectFiltered ? currentSubjectFilter : (allSubjects[0] || '');
+            const categories = weightCategoriesMap[selectedSubject] || [];
+            categories.forEach(cat => {
+                const option = document.createElement('option');
+                option.value = cat.name;
+                option.textContent = cat.name;
+                categorySelect.appendChild(option);
+            });
+
+            // Add change handler for subject to update categories
+            subjectSelect.addEventListener('change', function() {
+                const newSubject = this.value;
+                const newCategories = weightCategoriesMap[newSubject] || [];
+                categorySelect.innerHTML = '';
+                newCategories.forEach(cat => {
+                    const option = document.createElement('option');
+                    option.value = cat.name;
+                    option.textContent = cat.name;
+                    categorySelect.appendChild(option);
+                });
+            });
+
+            // Create TD elements
+            const subjectTd = document.createElement('td');
+            subjectTd.appendChild(subjectSelect);
+
+            const categoryTd = document.createElement('td');
+            categoryTd.appendChild(categorySelect);
 
             newRow.appendChild(document.createElement('td')); // Checkbox
             newRow.appendChild(subjectTd);
