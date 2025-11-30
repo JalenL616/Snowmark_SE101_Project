@@ -84,15 +84,12 @@
                 %}{% for c, m in messages %}<div class="toast {{ c }} show">{{ m }}</div>{% endfor %}{% endif %}{%
                 endwith %}</div>
 
-            <div id="validation-alert"></div>
-
 
 
 
             <div class="main-container">
                 <div class="full-width-panel">
-                    <h1 style="margin: 0 0 20px 0; font-size: 1.8em; color: var(--text-color); font-weight: 600;">Hello,
-                        {{ username }}!</h1>
+
                     <div class="action-bar">
                         <!-- Hidden form for compatibility with existing JS that might look for these inputs -->
                         <form id="filter-form" style="display:none;">
@@ -143,9 +140,16 @@
                         <table>
                             <thead>
                                 <tr>
+<<<<<<< HEAD
                                     {% if selected_subject and selected_subject != 'all' %}
                                     <th><input type="checkbox" id="selectAll"></th>
                                     {% endif %}
+=======
+                                    <th style="white-space:nowrap; width: 56px;">
+                                        <span class="drag-col-hint" title="Drag rows">⇅</span>
+                                        <input type="checkbox" id="selectAll">
+                                    </th>
+>>>>>>> upstream/main
                                     <th>Subject</th>
                                     <th>Category</th>
                                     <th>Study Time</th>
@@ -167,12 +171,54 @@
                                 </tr>
                                 {% endif %}
                             </thead>
+
                             <tbody id="study-table-body">
                                 {% for row in data %}
+<<<<<<< HEAD
                                     {% if not (selected_subject is not defined or selected_subject == 'all') or row.grade is none %}
                                     <tr data-id="{{ row.id }}" class="{% if row.is_prediction %}prediction-row{% endif %}">
                                         {% if selected_subject and selected_subject != 'all' %}
                                         <td><input type="checkbox" class="select-assignment" data-id="{{ row.id }}"></td>
+=======
+                                <tr data-id="{{ row.id }}"
+                                    class="assignment-row {% if row.is_prediction %}prediction-row{% endif %}">
+                                    <td>
+                                        <span class="drag-handle" title="Drag" aria-label="Drag to reorder">⋮⋮</span>
+                                        <input type="checkbox" class="select-assignment" data-id="{{ row.id }}">
+                                    </td>
+                                    <td>{{ row.subject }}</td>
+                                    <td><span class="category-tag"><svg xmlns="http://www.w3.org/2000/svg"
+                                                viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                                stroke-linecap="round" stroke-linejoin="round">
+                                                <path
+                                                    d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z">
+                                                </path>
+                                                <line x1="7" y1="7" x2="7.01" y2="7"></line>
+                                            </svg> {{ row.category }}</span></td>
+                                    {% if row.is_prediction %}
+                                    <td><input type="number" name="study_time" class="prediction-input hours-input"
+                                            data-id="{{ row.id }}" value="{{ row.study_time }}" step="0.1" min="0"
+                                            style="width: 80px;"> hours
+                                    </td>
+                                    <td class="prediction-name-cell" contenteditable="true" data-id="{{ row.id }}">{{ row.assignment_name }}</td>
+                                    <td><input type="number" name="grade" class="prediction-input grade-input"
+                                            data-id="{{ row.id }}" value="{{ row.grade }}" step="1" min="0"
+                                            style="width: 80px;">%</td>
+                                    {% else %}
+                                    <td>{{ "%.1f"|format(row.study_time) }} hours</td>
+                                    <td>{{ row.assignment_name }}</td>
+                                    <td>{% if row.grade is not none %}{{ row.grade }}%{% else %}-{% endif %}</td>
+                                    {% endif %}
+                                    <td>{{ "%.2f"|format(row.weight) }}%</td>
+                                    <td>
+                                        {% if row.is_prediction %}
+                                        <button class="action-btn predict-btn">Predict</button>
+                                        <button class="action-btn add-prediction-btn">Add</button>
+                                        <button class="action-btn delete-btn">Delete</button>
+                                        {% else %}
+                                        <button class="action-btn edit-btn">Edit</button>
+                                        <button class="action-btn delete-btn">Delete</button>
+>>>>>>> upstream/main
                                         {% endif %}
                                         <td>{{ row.subject }}</td>
                                         <td><span class="category-tag"><svg xmlns="http://www.w3.org/2000/svg"
@@ -214,7 +260,7 @@
                     </div>
                     <!-- Combined Control Bar -->
                     <div class="control-bar"
-                        style="display: flex; flex-wrap: nowrap; overflow-x: auto; gap: 20px; align-items: center; margin-top: 15px; padding: 15px; background-color: var(--surface-color); border: 1px solid var(--border-color); border-radius: 8px; box-shadow: var(--shadow);">
+                        style="display: flex; flex-wrap: nowrap; overflow-x: auto; gap: 20px; align-items: center; margin-top: 15px; padding: 15px; background-color: var(--surface-color); border: 1px solid var(--border-light); border-radius: 8px; box-shadow: var(--shadow);">
 
                         <!-- Standard Buttons -->
                         <div class="button-group" style="display: flex; gap: 8px;">
@@ -236,7 +282,7 @@
 
                         <!-- Subject Grade Predictor (Conditional) -->
                         <div id="subject-predictor-container"
-                            style="display: none; flex: 1; min-width: 300px; border-left: 2px solid var(--border-color); padding-left: 20px;">
+                            style="display: none; flex: 1; min-width: 300px; border-left: 2px solid var(--border-light); padding-left: 20px;">
                             <div style="display: flex; gap: 15px; align-items: center; flex-wrap: wrap;">
                                 <h3 style="margin: 0; font-size: 1.1em; white-space: nowrap; color: var(--text-color);">
                                     Subject Predictor:</h3>
@@ -275,9 +321,6 @@
                                         </div>
                                     </div>
                                 </div>
-                            </div>
-                            <div id="predictor-message"
-                                style="margin-top: 5px; color: var(--text-secondary); font-style: italic; font-size: 0.9em;">
                             </div>
                         </div>
                     </div>
@@ -327,7 +370,7 @@
 
         {% if selected_subject and selected_subject != 'all' %}
         <div class="delete-subject-bar"
-            style="margin-top: 40px; padding-top: 20px; border-top: 2px solid var(--border-color); width: 100%; text-align: center;">
+            style="margin-top: 40px; padding-top: 20px; border-top: 2px solid var(--border-light); width: 100%; text-align: center;">
             <button type="button" id="delete-subject-btn" class="subject-action-btn delete-subject-btn"
                 style="padding: 10px 20px; font-size: 1em;" data-subject="{{ selected_subject }}">Delete Subject {{
                 selected_subject }}</button>
@@ -398,7 +441,12 @@
     </div>
     </div>
 
+<<<<<<< HEAD
     <script src="{{ url_for('static', filename='js/main.v2.js') }}?v={{ range(1, 10000) | random }}" defer></script>
+=======
+    <script src="{{ url_for('static', filename='js/main.js') }}?v={{ range(1, 10000) | random }}" defer></script>
+    <!-- <script src="{{ url_for('static', filename='js/menu-fix.js') }}?v={{ range(1, 10000) | random }}" defer></script> -->
+>>>>>>> upstream/main
 </body>
 
 </html>
