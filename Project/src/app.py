@@ -387,17 +387,23 @@ def display_table():
 def display_subject(subject_name):
     """Subject-specific view."""
     # Verify subject exists (include retired subjects so they can still be viewed)
-    all_subjects = get_all_subjects(current_user.username, include_retired=True)
-    unique_subjects = [s['name'] for s in all_subjects]
-    if subject_name not in unique_subjects:
-         return redirect(url_for('display_table'))
-    
-    # Check if this subject is retired
-    retired = get_retired_subjects(current_user.username)
-    retired_names = [s['name'] for s in retired]
-    is_retired_subject = subject_name in retired_names
-    
-    return render_subject_view(subject_name, is_retired_subject=is_retired_subject)
+    try:
+        all_subjects = get_all_subjects(current_user.username, include_retired=True)
+        unique_subjects = [s['name'] for s in all_subjects]
+        app.logger.info(f"Looking for subject '{subject_name}' in: {unique_subjects}")
+        if subject_name not in unique_subjects:
+            app.logger.warning(f"Subject '{subject_name}' not found, redirecting to home")
+            return redirect(url_for('display_table'))
+        
+        # Check if this subject is retired
+        retired = get_retired_subjects(current_user.username)
+        retired_names = [s['name'] for s in retired]
+        is_retired_subject = subject_name in retired_names
+        
+        return render_subject_view(subject_name, is_retired_subject=is_retired_subject)
+    except Exception as e:
+        app.logger.error(f"Error in display_subject: {e}")
+        return redirect(url_for('display_table'))
 
 def render_subject_view(filter_subject, is_retired_subject=False):
     """Helper to render the main view with a specific subject filter."""
