@@ -1854,6 +1854,13 @@ html:has(.landing-page)::-webkit-scrollbar {
     box-shadow: 0 6px 20px rgba(79, 172, 254, 0.4);
 }
 
+/* Theme toggle link in header */
+.landing-header-right .theme-toggle-link {
+    margin-top: 0;
+    padding: 8px 14px;
+    font-size: 0.8rem;
+}
+
 /* Scroll Progress Bar */
 .scroll-progress-container {
     position: fixed;
@@ -2121,8 +2128,19 @@ html:has(.landing-page)::-webkit-scrollbar {
 }
 
 .feature-icon {
-    font-size: 2.2rem;
-    margin-bottom: 12px;
+    width: 64px;
+    height: 64px;
+    margin: 0 auto 12px auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.feature-icon img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    border-radius: 8px;
 }
 
 .feature-card h3 {
@@ -2136,6 +2154,139 @@ html:has(.landing-page)::-webkit-scrollbar {
     color: rgba(255, 255, 255, 0.7);
     margin: 0;
     line-height: 1.5;
+}
+
+/* Theme-specific icons */
+.feature-icon .icon-frosty {
+    display: block;
+}
+
+.feature-icon .icon-toasty {
+    display: none;
+}
+
+.landing-toasty .feature-icon .icon-frosty {
+    display: none;
+}
+
+.landing-toasty .feature-icon .icon-toasty {
+    display: block;
+}
+
+.theme-toggle-link {
+    display: inline-block;
+    margin-top: 12px;
+    padding: 8px 16px;
+    background: linear-gradient(135deg, #f7a08e 0%, #d2691e 100%);
+    color: #fff;
+    text-decoration: none;
+    border-radius: 20px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    transition: all 0.3s ease;
+    font-family: 'Inter', sans-serif;
+}
+
+.theme-toggle-link:hover {
+    transform: scale(1.05);
+    box-shadow: 0 4px 15px rgba(210, 105, 30, 0.4);
+}
+
+.landing-toasty .theme-toggle-link {
+    background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+}
+
+.landing-toasty .theme-toggle-link:hover {
+    box-shadow: 0 4px 15px rgba(79, 172, 254, 0.4);
+}
+
+/* ============================================
+   LANDING PAGE TOASTY THEME
+   ============================================ */
+
+html:has(.landing-page.landing-toasty) {
+    background: #611700;
+}
+
+.landing-page.landing-toasty {
+    background: #611700;
+}
+
+.landing-page.landing-toasty .hero-section {
+    background: linear-gradient(180deg, #8b2000 0%, #611700 50%, #3d0d00 100%);
+}
+
+.landing-page.landing-toasty .demo-section {
+    background: linear-gradient(180deg, #3d0d00 0%, #611700 50%, #8b2000 100%);
+}
+
+.landing-page.landing-toasty .features-section {
+    background: linear-gradient(180deg, #8b2000 0%, #611700 50%, #3d0d00 100%);
+}
+
+.landing-page.landing-toasty .cta-section {
+    background: linear-gradient(180deg, #3d0d00 0%, #611700 50%, #8b2000 100%);
+}
+
+.landing-page.landing-toasty .landing-header.scrolled {
+    background: rgba(97, 23, 0, 0.95);
+}
+
+.landing-page.landing-toasty .landing-header-btn {
+    background: linear-gradient(135deg, #f7a08e 0%, #d2691e 100%);
+}
+
+.landing-page.landing-toasty .landing-header-btn:hover {
+    background: linear-gradient(135deg, #d2691e 0%, #bd0600 100%);
+    box-shadow: 0 6px 20px rgba(210, 105, 30, 0.4);
+}
+
+.landing-page.landing-toasty .btn-primary {
+    background: linear-gradient(135deg, #f7a08e 0%, #d2691e 100%);
+}
+
+.landing-page.landing-toasty .btn-primary:hover {
+    background: linear-gradient(135deg, #d2691e 0%, #bd0600 100%);
+}
+
+.landing-page.landing-toasty .btn-secondary {
+    border-color: #f7a08e;
+    color: #f7a08e;
+}
+
+.landing-page.landing-toasty .btn-secondary:hover {
+    background: rgba(247, 160, 142, 0.1);
+}
+
+.landing-page.landing-toasty .feature-card {
+    background: rgba(253, 234, 231, 0.08);
+    border-color: rgba(247, 160, 142, 0.2);
+}
+
+.landing-page.landing-toasty .feature-card:hover {
+    background: rgba(253, 234, 231, 0.12);
+}
+
+.landing-page.landing-toasty .nav-dot {
+    border-color: rgba(247, 160, 142, 0.5);
+}
+
+.landing-page.landing-toasty .nav-dot.active {
+    background: #f7a08e;
+    border-color: #f7a08e;
+}
+
+.landing-page.landing-toasty .scroll-progress-bar {
+    background: linear-gradient(90deg, #f7a08e, #d2691e);
+}
+
+.landing-page.landing-toasty .cta-login a {
+    color: #f7a08e;
+}
+
+.landing-page.landing-toasty .demo-video-placeholder {
+    background: rgba(253, 234, 231, 0.05);
+    border-color: rgba(247, 160, 142, 0.2);
 }
 
 /* CTA Section */
@@ -2351,7 +2502,8 @@ html:has(.landing-page)::-webkit-scrollbar {
     }
 
     .feature-icon {
-        font-size: 1.8rem;
+        width: 52px;
+        height: 52px;
     }
 
     .feature-card h3 {
@@ -2663,7 +2815,7 @@ html:has(.landing-page)::-webkit-scrollbar {
 .landing-about {
     background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
     min-height: 100vh;
-    padding-top: 70px;
+    padding-top: 0;
     font-family: 'Merriweather', serif;
 }
 
@@ -2683,6 +2835,100 @@ html:has(.landing-page)::-webkit-scrollbar {
 .landing-about .left-panel li {
     color: #ffffff;
     font-size: 1.125rem;
+}
+
+.landing-about .left-panel li {
+    margin-bottom: 12px;
+}
+
+.landing-about .left-panel ul {
+    margin-bottom: 24px;
+}
+
+/* Team Photo Styles */
+.team-photo-container {
+    margin: 24px 0 32px 0;
+    text-align: left;
+}
+
+.team-photo {
+    max-width: 100%;
+    width: 600px;
+    height: auto;
+    border-radius: 12px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+}
+
+.team-photo-caption {
+    margin-top: 12px;
+    font-size: 0.95rem;
+    font-style: italic;
+    color: rgba(255, 255, 255, 0.7);
+}
+
+.main-wrapper:not(.landing-about) .team-photo-caption {
+    color: var(--text-secondary);
+}
+
+/* Logged-in About Page - Match public page text/spacing */
+.main-wrapper:not(.landing-about) .left-panel p,
+.main-wrapper:not(.landing-about) .left-panel li {
+    font-size: 1.125rem;
+    line-height: 1.6;
+}
+
+.main-wrapper:not(.landing-about) .left-panel li {
+    margin-bottom: 12px;
+}
+
+.main-wrapper:not(.landing-about) .left-panel ul {
+    margin-bottom: 24px;
+}
+
+/* About Public Page Styles */
+.about-public {
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+    min-height: 100vh;
+    padding-top: 70px;
+}
+
+.about-public .landing-header {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+}
+
+/* Toasty theme for public about page */
+.about-public.landing-toasty {
+    background: linear-gradient(135deg, #611700 0%, #8b2000 50%, #3d0d00 100%);
+}
+
+.about-public.landing-toasty .landing-about {
+    background: transparent;
+}
+
+.about-public.landing-toasty .landing-about .main-container,
+.about-public.landing-toasty .landing-about .left-panel h2 {
+    color: #fdeae7;
+}
+
+.about-public.landing-toasty .landing-about .left-panel p,
+.about-public.landing-toasty .landing-about .left-panel li {
+    color: #fdeae7;
+}
+
+.about-public.landing-toasty .landing-header.scrolled {
+    background: rgba(97, 23, 0, 0.95);
+}
+
+.about-public.landing-toasty .landing-header-btn {
+    background: linear-gradient(135deg, #f7a08e 0%, #d2691e 100%);
+}
+
+.about-public.landing-toasty .landing-header-btn:hover {
+    background: linear-gradient(135deg, #d2691e 0%, #bd0600 100%);
+    box-shadow: 0 6px 20px rgba(210, 105, 30, 0.4);
 }
 
 .nav-btn {
