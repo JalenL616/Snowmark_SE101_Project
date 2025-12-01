@@ -12,7 +12,7 @@ if os.getenv("USE_LOCAL_DB", "").lower() == "true":
     PARAM_PLACEHOLDER = "?"
 else:
     from db import init_db, _connect, TABLE_NAME, CATEGORIES_TABLE, SUBJECTS_TABLE, USERS_TABLE
-    import mysql.connector
+    import pymysql
     PARAM_PLACEHOLDER = "%s"
 from werkzeug.security import generate_password_hash, check_password_hash
 
