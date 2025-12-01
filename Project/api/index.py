@@ -16,5 +16,5 @@ os.chdir(src_path)
 # Import the Flask app
 from app import app
 
-# Vercel looks for 'app' or 'handler'
-handler = app
+# Export for Vercel
+app = app
