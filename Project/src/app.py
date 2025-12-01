@@ -382,15 +382,19 @@ def display_table():
     subject_filter = request.args.get('subject', 'all')
     return render_subject_view(subject_filter)
 
-@app.route('/subject/<subject_name>')
+@app.route('/subject/<path:subject_name>')
 @login_required
 def display_subject(subject_name):
     """Subject-specific view."""
+    # URL decode the subject name (Flask should do this automatically, but being explicit)
+    from urllib.parse import unquote
+    subject_name = unquote(subject_name)
+    
     # Verify subject exists (include retired subjects so they can still be viewed)
     try:
         all_subjects = get_all_subjects(current_user.username, include_retired=True)
         unique_subjects = [s['name'] for s in all_subjects]
-        app.logger.info(f"Looking for subject '{subject_name}' in: {unique_subjects}")
+        app.logger.info(f"Looking for subject '{subject_name}' (decoded) in: {unique_subjects}")
         if subject_name not in unique_subjects:
             app.logger.warning(f"Subject '{subject_name}' not found, redirecting to home")
             return redirect(url_for('display_table'))
