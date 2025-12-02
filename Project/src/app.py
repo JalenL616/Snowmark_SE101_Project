@@ -812,6 +812,11 @@ def stats():                      # <-- was: def stats(username):
 
     stats_data = calculate_stats(username)   # pass username into the function
 
+    # Check if user has any assignments - redirect to home with message if not
+    if not stats_data['has_data']:
+        flash('Please add some assignments first to view statistics.', 'info')
+        return redirect(url_for('display_table'))
+
     # sidebar subjects for this user
     conn = _connect(); cur = conn.cursor()
     try:
