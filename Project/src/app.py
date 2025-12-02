@@ -2013,6 +2013,14 @@ def serve_static(filename):
     
     # Get the full path to the static file
     static_folder = app.static_folder
+    file_path = os.path.join(static_folder, filename)
+    
+    # Debug logging for Vercel
+    app.logger.info(f"Static request: {filename}")
+    app.logger.info(f"Static folder: {static_folder}")
+    app.logger.info(f"Full path: {file_path}")
+    app.logger.info(f"File exists: {os.path.exists(file_path)}")
+    app.logger.info(f"CWD: {os.getcwd()}")
     
     # Determine the MIME type
     mimetype, _ = mimetypes.guess_type(filename)
@@ -2021,6 +2029,15 @@ def serve_static(filename):
         return send_from_directory(static_folder, filename, mimetype=mimetype)
     except Exception as e:
         app.logger.error(f"Error serving static file {filename}: {e}")
+        # List what files actually exist
+        if os.path.exists(static_folder):
+            try:
+                images_dir = os.path.join(static_folder, 'images')
+                if os.path.exists(images_dir):
+                    files = os.listdir(images_dir)
+                    app.logger.error(f"Files in images dir: {files}")
+            except:
+                pass
         return f"File not found: {filename}", 404
 
 
