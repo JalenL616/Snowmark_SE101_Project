@@ -1976,6 +1976,7 @@ html:has(.landing-page)::-webkit-scrollbar {
 .demo-video-wrapper {
     position: relative;
     width: 100%;
+    padding-top: 56.25%; /* 16:9 aspect ratio */
     background: rgba(0, 0, 0, 0.3);
     border-radius: 16px;
     overflow: hidden;
@@ -1983,8 +1984,11 @@ html:has(.landing-page)::-webkit-scrollbar {
 }
 
 .demo-video {
+    position: absolute;
+    top: 0;
+    left: 0;
     width: 100%;
-    display: block;
+    height: 100%;
     border-radius: 16px;
 }
 
